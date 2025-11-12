@@ -1,5 +1,7 @@
 from typing import Union
 
+# Documentation seems to be at:
+#   https://whisper-api.com/docs/transcription-options/#setting-the-language
 import whisper, subprocess
 from whisper.normalizers import EnglishTextNormalizer
 
