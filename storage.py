@@ -25,7 +25,8 @@ class Database:
     def get(self):
         db = getattr(g, "_database", None)
         if db is None:
-            db = g._database = sqlite3.connect(self.database)
+            # Add timeout for concurrent access (multiple users)
+            db = g._database = sqlite3.connect(self.database, timeout=10.0)
             for i in self.init:
                 self.execute(i)
         return db

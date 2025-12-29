@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="../../vars.css">
+    <link rel="stylesheet" href="../../index.css">
+    <link rel="stylesheet" href="../../audio.css">
+    <link rel="stylesheet" href="../../playback.css">
+    <link rel="stylesheet" href="../../review_index.css?v=18">
+    <link rel="stylesheet" href="../../audio_review.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto">
+    <script type="text/javascript" src="../../audio.js"></script>
+    <script type="text/javascript" src="../../review.js"></script>
+  </head>
+  <body>
+    <div id="content">
+      <div id="header">
+        <div id="org"><span>Stanford</span></div>
+        <div id="project">QuickSIN</div>
+
+      </div>
+    <div id="instructions">
+
+
+      <h1>Scoring Instructions</h1>
+
+
+      This task will consist of scoring clinical tests of speech recognition. Please use headphones.
+      Score these as you would in routine clinical practice.
+      You may only listen to each playback once.
+      <br><br>
+      The key words are displayed to the right of the audio.
+      Score each word correct (blue) or incorrect (red) by clicking it.
+      The "All" button marks all key words correct and "None" marks all key words incorrect.
+
+      <br><br>
+      Submit and progress by clicking the "Next Audio" button.
+      <br><br>
+
+    </div>
+    <div id="samples">
+      <div>
+        Audio Example
+        <div>
+          <button class="playback-interface load"
+              data-src="/jnd/api/review/upload/sin_3_29_37115758-8c43-4b19-b04a-5084e1a3c3fb.wav"></button>
+          <canvas id="example-waveform-canvas" width="300" height="60"></canvas>
+        </div>
+      </div>
+      <div>
+        Scoring Example
+        <div id="example-aux-data">
+          <div id="example-result-options">
+            <button class="base-button" id="example-result-all" type="button">All</button>
+            <button class="base-button" id="example-result-none" type="button">None</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- <div id="instructions" style="text-align: left;">
+      <br><br>
+      To begin listening, press the play button to start the audio.<br>
+    </div> -->
+
+
+    <form action="javascript:;" onsubmit="claim_username_review()" class="userbox"
+        autocomplete="off" enctype="multipart/form-data">
+        <br><br>
+        I am a new reviewer: <input type="checkbox" id="new-reviewer" onchange="if(this.checked) { document.getElementById('returning-reviewer').checked=false; document.getElementById('new-fields').style.display='block'; } else { document.getElementById('new-fields').style.display='none'; } updateEmailFormVisibility();" />
+        <br>
+        I am a returning reviewer: <input type="checkbox" id="returning-reviewer" onchange="if(this.checked) { document.getElementById('new-reviewer').checked=false; document.getElementById('new-fields').style.display='none'; } updateEmailFormVisibility();" />
+        <br><br>
+        
+        <div id="new-fields" style="display:none">
+          1. Download blank consent form: <br>
+          <button type="button" id="download-consent-btn" onclick="const link = document.createElement('a'); link.href = 'var/www/jnd.emily/static/review_modules/consent_form_for_raters.pdf'; link.download = 'consent_form.pdf'; link.click();">Download Consent Form Here</button> 
+          <br> <br>
+          2. Upload your signed consent form: <br>
+          <input type="file" id="filled-consent-form" name="filled-consent-form"> <br> <br>
+          3. Demographic information:<br>
+          I am a native English speaker: <input type="checkbox" id="storage" />
+          <br>
+          I am an audiology student: <input type="checkbox" id="is-audiology-student" onchange="if(this.checked) { document.getElementById('is-certified-audiologist').checked=false; var exp=document.getElementById('experience-years'), lbl=document.getElementById('experience-label'), yrs=document.getElementById('experience-years-label'); exp.disabled=true; exp.style.display='none'; lbl.textContent=''; yrs.style.display='none'; }" />
+          <br>
+          I am a certified audiologist: <input type="checkbox" id="is-certified-audiologist" onchange="var exp=document.getElementById('experience-years'), lbl=document.getElementById('experience-label'), yrs=document.getElementById('experience-years-label'); if(this.checked) { document.getElementById('is-audiology-student').checked=false; exp.disabled=false; exp.style.display='inline'; lbl.textContent='in practice for '; yrs.style.display='inline'; } else { exp.disabled=true; exp.style.display='none'; lbl.textContent=''; yrs.style.display='none'; }" />
+          <br>
+          <span id="experience-label"></span><input type="number" id="experience-years" min="0" max="100" step="1" disabled /> <span id="experience-years-label">years</span>
+          <br><br>
+        </div>
+      
+      <div id="email-form-container" style="display:none">
+        Please enter your email address to begin.
+        <br><br>
+        <!-- lpignore is for lastpass because they ignore general autocomplete rule (line 133)-->
+        <input type="text" id="username" onkeyup="check_username()"
+               data-lpignore="true" /><!--
+        --><!--<input type="submit" id="submit" value="start pitch test"
+                  disabled />
+        --><input type="submit" id="submit" value="start scoring" disabled />
+        <span id="username-status"></span>
+      </div>
+      <!-- buttons for test type - change to only patient when we actually collect data? -->
+      <input type="radio" id="prepilot" name="test-type" checked />
+      <label for="prepilot">prepilot</label>
+      <span class="h-radio-spacer"></span>
+      <input type="radio" id="pilot" name="test-type" />
+      <label for="pilot">pilot</label>
+      <span class="h-radio-spacer"></span>
+      <input type="radio" id="patient" name="test-type" />
+      <label for="patient">patient</label>
+    </form>
+    <div class="org-icon-container">
+      <img class="org-icon" />
+    </div>
+    <br><br>
+
+  </div>
+  <script>
+    function check_username() {
+      const el = document.getElementById("username");
+      const submit = document.getElementById("submit");
+      const newReviewer = document.getElementById("new-reviewer");
+      const returningReviewer = document.getElementById("returning-reviewer");
+      submit.disabled = !el.value || el.value.length === 0 || (!newReviewer.checked && !returningReviewer.checked);
+    }
+    
+    function updateEmailFormVisibility() {
+      const emailFormContainer = document.getElementById("email-form-container");
+      const newReviewer = document.getElementById("new-reviewer");
+      const returningReviewer = document.getElementById("returning-reviewer");
+      if (emailFormContainer) {
+        emailFormContainer.style.display = (newReviewer.checked || returningReviewer.checked) ? "block" : "none";
+      }
+    }
+    
+    function claim_username_review() {
+      const newReviewer = document.getElementById("new-reviewer");
+      const returningReviewer = document.getElementById("returning-reviewer");
+      const el = document.getElementById("username");
+      const input = el.value;
+      const output = document.getElementById("username-status");
+      const submit = document.getElementById("submit");
+      
+      if (!newReviewer.checked && !returningReviewer.checked) {
+        submit.disabled = true;
+        output.innerText = "Please select whether you are a new or returning reviewer";
+        return;
+      }
+      if (!input) {
+        output.innerText = "Please enter a username";
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("v", input);
+      formData.append("project", "review");
+      formData.append("list", "null");
+      formData.append("t", document.querySelector("[name=test-type]:checked").id);
+
+      if (newReviewer.checked) {
+        const storage = document.getElementById("storage");
+        if (!storage.checked) {
+          output.innerText = "You must confirm that you are a native English speaker to begin scoring.";
+          submit.disabled = false;
+          return;
+        }
+        
+        const fileInput = document.getElementById("filled-consent-form");
+        const file = fileInput.files[0];
+        if (!file) {
+          output.innerText = "Please upload a signed consent form PDF.";
+          submit.disabled = false;
+          return;
+        }
+        
+        if (!file.name.toLowerCase().endsWith('.pdf') || file.type !== 'application/pdf') {
+          output.innerText = "Please upload a valid PDF file.";
+          submit.disabled = false;
+          return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          output.innerText = "File is too large. Please upload a PDF file smaller than 10MB.";
+          submit.disabled = false;
+          return;
+        }
+        formData.append("filled-consent-form", file);
+        
+        const audiologyStudent = document.getElementById("is-audiology-student");
+        const certifiedAudiologist = document.getElementById("is-certified-audiologist");
+        const experienceYears = document.getElementById("experience-years");
+        if (audiologyStudent?.checked) {
+          formData.append("is-audiology-student", "true");
+        }
+        if (certifiedAudiologist?.checked) {
+          formData.append("is-certified-audiologist", "true");
+          const yearsValue = experienceYears?.value?.trim();
+          if (!yearsValue) {
+            output.innerText = "Please enter your years of practice";
+            submit.disabled = false;
+            return;
+          }
+          const yearsNum = parseInt(yearsValue, 10);
+          if (isNaN(yearsNum) || yearsNum < 0 || yearsNum > 100) {
+            output.innerText = "Please enter a valid number of years (0-100)";
+            submit.disabled = false;
+            return;
+          }
+          formData.append("experience-years", yearsValue);
+        }
+      }
+
+      // Send POST request with FormData
+      fetch('/jnd/api/set-username', {
+        method: 'POST',
+        body: formData
+      })
+        .then(response => {
+          if (!response.ok) {
+            return response.json().then(data => Promise.reject(data));
+          }
+          return response.json();
+        })
+        .then((data) => {
+          // Check if response contains an error
+          if (data && typeof data === 'object' && data.error) {
+            output.innerText = data.error;
+            submit.disabled = false;
+            return;
+          }
+          if (data) {
+            window.location.href = "/jnd/api/review.html";
+          } else {
+            output.innerText = "Username not available";
+            submit.disabled = false;
+          }
+        })
+        .catch((error) => {
+          // Handle both network errors and API error responses
+          if (error && error.error) {
+            output.innerText = error.error;
+          } else {
+            output.innerText = "Couldn't reach the server";
+          }
+          submit.disabled = false;
+        });
+    }
+
+    // Initialize waveform and scoring for example audio (hardcoded file)
+    window.addEventListener('load', () => {
+      // Create audio element from playback-interface button (like index.js does)
+      const samples = document.getElementById("samples");
+      if (samples) {
+        for (const el of document.getElementsByClassName("playback-interface")) {
+          const src = el.getAttribute("data-src");
+          if (src === null) continue;
+          let audio = document.createElement("audio");
+          audio.addEventListener("canplaythrough", ((el, audio) => () => {
+            el.classList.remove("load");
+            el.classList.add("play");
+            let playing = false;
+            const f = (actively) => () => {
+              playing = !playing;
+              el.classList.remove("play");
+              el.classList.remove("pause");
+              el.classList.add(playing ? "pause" : "play");
+              if (!actively) audio.load();
+              else if (playing) audio.play();
+              else audio.pause();
+            };
+            el.addEventListener("click", f(true));
+            audio.addEventListener("ended", f(false));
+          })(el, audio));
+          audio.src = src;
+          audio.setAttribute("preload", "");
+          samples.appendChild(audio);
+        }
+      }
+      
+      const exampleCanvas = document.getElementById('example-waveform-canvas');
+      if (!exampleCanvas) return;
+      
+      // Hardcoded answer words for the example audio
+      const exampleAnswer = "CHAIR LOOKED STRONG NO BOTTOM";
+      
+      // Initialize scoring example 
+      const initScoringExample = () => {
+        const auxData = document.getElementById('example-aux-data');
+        if (!auxData) return;
+        
+        // Remove existing options-case if present
+        auxData.querySelector(".options-case")?.remove();
+        
+        // Create options-case container
+        const container = auxData.appendChild(document.createElement("div"));
+        container.classList.add("options-case");
+        
+        // Create word buttons 
+        exampleAnswer.split(" ").forEach((word, i) => {
+          const name = `example-option-${i}`;
+          const wrapper = container.appendChild(document.createElement("div"));
+          
+          // Create both 'on' and 'off' radio buttons and labels
+          for (const j of ['on', 'off']) {
+            const check = wrapper.appendChild(document.createElement("input"));
+            const label = wrapper.appendChild(document.createElement("label"));
+            Object.assign(check, {
+              type: "radio",
+              id: `${name}-${j}`,
+              name: name,
+              required: true
+            });
+            check.classList.add("annotation", `annotation-${j}`);
+            Object.assign(label, {
+              htmlFor: `${name}-${j}`,
+              textContent: word
+            });
+            label.classList.add("option", "base-button", `option-${j}`);
+          }
+        });
+        
+        // Set up "All" and "None" with the appropriate colors
+        const buttonHandlers = {
+          'example-result-all': '.annotation-on',
+          'example-result-none': '.annotation-off'
+        };
+        
+        // all and none functionality
+        for (const [buttonId, selector] of Object.entries(buttonHandlers)) {
+          const button = document.getElementById(buttonId);
+          button?.addEventListener('click', () => {
+            auxData.querySelectorAll(selector).forEach(radio => radio.checked = true);
+          });
+        }
+      };
+      
+      // Initialize scoring
+      initScoringExample();
+      
+      // Initialize waveform for the example audio
+      const initWaveform = () => {
+        // Find the audio element created by playback-interface
+        const audioElements = document.querySelectorAll('#samples audio');
+        let exampleAudio = null;
+        for (const audio of audioElements) {
+          if (audio.src && audio.src.includes('sin_3_29_37115758-8c43-4b19-b04a-5084e1a3c3fb.wav')) {
+            exampleAudio = audio;
+            break;
+          }
+        }
+        
+        if (!exampleAudio) {
+          setTimeout(initWaveform, 100);
+          return;
+        }
+        
+        const waveform = new SimpleWaveform(exampleAudio, exampleCanvas);
+        
+        // Wait for audio to load, then draw waveform
+        const loadWaveform = () => {
+          if (exampleAudio.readyState >= 2) {
+            waveform.loadWaveform();
+          } else {
+            exampleAudio.addEventListener('loadeddata', () => waveform.loadWaveform(), { once: true });
+          }
+        };
+        
+        // If audio is already loaded, trigger waveform loading
+        if (exampleAudio.readyState >= 2) {
+          loadWaveform();
+        } else {
+          exampleAudio.addEventListener('loadeddata', loadWaveform, { once: true });
+        }
+        
+        // Update waveform progress during playback
+        exampleAudio.addEventListener('timeupdate', () => {
+          if (exampleAudio.duration) {
+            waveform.updateProgress(exampleAudio.currentTime, exampleAudio.duration);
+          }
+        });
+        
+        // Reset waveform when audio ends
+        exampleAudio.addEventListener('ended', () => {
+          waveform.resetProgress();
+        });
+      };
+      
+      // Start initialization after a delay to allow audio elements to be created
+      setTimeout(initWaveform, 500);
+    });
+  </script>
+  </body>
+</html>
