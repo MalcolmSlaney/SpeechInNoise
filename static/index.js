@@ -189,7 +189,11 @@ window.addEventListener("load", () => {
     audio.setAttribute("preload", "")
     samples.appendChild(audio)
   }
-  recorder = new TestRecorder(".sound-dot")
+  // Only recorder if microphone test element exists so that review page doesn't trigger request
+  const soundDots = document.querySelectorAll(".sound-dot");
+  if (soundDots.length > 0) {
+    recorder = new TestRecorder(".sound-dot")
+  }
   check_username()
 })
 
