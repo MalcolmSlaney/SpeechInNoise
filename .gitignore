@@ -7,6 +7,7 @@ nohup.out
 /experiments_debug.db
 /*.db
 /uploads
+/consent_form_uploads
 
 # Python byte-compiled / optimized / DLL files
 __pycache__/
