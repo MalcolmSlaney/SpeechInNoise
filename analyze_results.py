@@ -1,9 +1,11 @@
+from absl import app, flags
 import csv
 from dataclasses import dataclass
 import json
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+import os
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -11,6 +13,7 @@ import sqlite3
 
 
 def get_all_sql_data(database: str = 'experiments.db'):
+  """Get all the test results from the database, joining all the tables."""
   con = sqlite3.connect(database)
   print(type(con))
   cur = con.cursor()
@@ -28,8 +31,13 @@ def get_all_sql_data(database: str = 'experiments.db'):
 
 
 def get_all_test_transcripts(database: str = 'experiments.db'):
+  """Get all the test transcripts from the database.
+  
+  Returns:   
+    id, project, snr, lang, level_number, trial_number, filename, answer, active
+  """
   con = sqlite3.connect(database)
-  print(type(con))
+  # print(type(con))
   cur = con.cursor()
   query = """SELECT * FROM audio_trials
           """
@@ -47,6 +55,83 @@ def fix_random_user_names(text_tag: str) -> str:
       return 'A0S3' # 'Shreyas'
   return text_tag
 
+################### Global Homonyms ################################
+
+def read_homonyms(filename: str = 'homonym_list.csv', 
+                  starting_dict={}) -> Dict[str, set]:
+  """Read a list of homonyms from a CSV file. 
+  
+  Start with an initial homonym list and rationalize it first by making sure
+  all words are bidirectionally included.
+  
+  Then read the rest from a CSV file, removing the null entries
+  """
+  # Rationalize the initial list by making sure all homonyms are listed
+  homonym_list = {}
+  for key, words in starting_dict.items():
+    words_set = set(words) | set([key,])
+    for word in words_set:
+      homonym_list[word] = words_set - set([word])
+
+  # print(homonym_list)
+  with open(filename, 'r') as f:
+    for line in f:
+      if line.startswith('#'):
+        continue
+      line = line.split('#', 1)[0].rstrip()  # Remove comments on each line
+      line = line.strip()
+      if not line: 
+        continue
+      words = line.split(',')
+      words = [w.strip() for w in words]
+      words = [w for w in words if w]
+      if len(words) < 2:
+        print('Did not find enough words:', line)
+      for word in words:
+        if word not in homonym_list:
+          homonym_list[word] = set(words) - set([word])
+        else:
+          homonym_list[word] = set(words) or (set(homonym_list[word]) - set(word))
+  return homonym_list
+
+
+def format_homonyms(current_word, homonym_dict: Dict[str, set[str]]) -> set[str]:
+  """Given a new word and the homonym dictionary, return the full set of 
+  homonyms as a set of words.
+  """
+  current_words = set(current_word.split('/'))
+  all_words = set()
+  for word in current_words:
+    all_words = all_words | set([word])
+    if word in homonym_dict:
+      all_words = all_words | homonym_dict[word]
+  return all_words
+
+
+def process_all_ground_truth(db_file: str,
+                             homonym_list: Dict[str, set[str]]) -> Dict[Tuple[str, int, int], list[set]]:
+  # Create a list of ground truths, indexed. by the test name, list number, and 
+  # then sentence number.
+  # https://github.com/MalcolmSlaney/SpeechInNoise/blob/81c92d3e8a7e7db6d5f62f511d4bebe8ef7f883c/schema.sql#L57
+  test_transcripts = get_all_test_transcripts(db_file)
+  print(f'Read ground truth for {len(test_transcripts)} tests.')
+
+  all_ground_truth = {}
+  for t in test_transcripts:
+    test_name = t[1]
+    list_number = t[5]
+    sentence_number = t[4]
+    word_list = t[7].lower().split(' ') # a list of words (some with / to separate homonyms)
+    ground_truth = [format_homonyms(word, homonym_list) for word in word_list]
+    all_ground_truth[(test_name, list_number, sentence_number)] = ground_truth
+    if 'toad' in ground_truth or 'toed' in ground_truth:
+      print(f'Found {ground_truth} in {test_name} list {list_number} sentence {sentence_number}')
+  print(f'Prepared ground truth for {test_name}, {list_number}, {sentence_number} is {ground_truth}')
+  print(f'Prepared ground truth for qs3/6/6 is {all_ground_truth[("quick", 6, 6)]}')
+  return all_ground_truth
+
+
+################### Result Class ################################
 
 @dataclass
 class QS_result:
@@ -96,9 +181,18 @@ def normalize_word(word: str) -> str:
   """Remove all but the letters in a word."""
   return re.sub(r'[^\w]', '', word.lower())
 
-def normalize_results(a_result: QS_result):
+def normalize_results(a_result: QS_result) -> QS_result:
+  """Normalize one result object.  This involves the following steps:
+  1) Convert user names that look random into fixed user names
+  2) Convert the ASR result from JSON to a dictionary 
+  3) Convert the annotation matches (audiologist judgements) from JSON to a list of booleans
+  4) Convert the ground truth from CSV to a list of words
+  5) Finally, convert the human recognition results into a list of recognized words.
+
+  Return the original result object after these enhancements.
+  """
   a_result.user_name = fix_random_user_names(a_result.user_name)
-  if isinstance(a_result.asr_results, str):
+  if isinstance(a_result.asr_results, str) and a_result.asr_results:
     a_result.asr_results = json.loads(a_result.asr_results)
 
   if isinstance(a_result.annotation_matches, str):
@@ -119,11 +213,13 @@ def normalize_results(a_result: QS_result):
 
 
 def score_asr_system(a_result: QS_result,
-                     all_ground_truth: Dict[Tuple[str, int, int], str],
+                     all_ground_truth: Dict[Tuple[str, int, int], 
+                                            list[set[str]]],
                      debug: bool = False):
   # Score the ASR results, creating a list of true/false
   # ground_truth = all_keyword_dict[(a_result.trials_trial_number-1,
   #                                  a_result.trials_level_number-1)]
+  # ground truth is a list of sets of words, one set per keyword
   ground_truth = all_ground_truth[(a_result.trials_project,
                                    a_result.trials_trial_number,
                                    a_result.trials_level_number)]
@@ -138,10 +234,10 @@ def score_asr_system(a_result: QS_result,
   if (a_result.asr_results and 'segments' in a_result.asr_results and
       a_result.asr_results['segments'] and
       'words' in a_result.asr_results['segments'][0]):
-    for ground_truth_set in ground_truth:
+    for word_truth_set in ground_truth:
       for reco in a_result.asr_results['segments'][0]['words']:
         word = normalize_word(reco['word'])
-        if word in ground_truth_set:
+        if word in word_truth_set:
           word_matches.append(True)
           match_times.append(reco['start'])
           break
@@ -172,8 +268,9 @@ def score_matches(a_result: QS_result, debug: bool = False):
 
 
 def convert_sql_to_results(all_query_results,
-                           all_ground_truth) -> List[QS_result]:
-  #Convert the SQL database into a list of qs_result objects
+                           all_ground_truth: List[set[str]]) -> List[QS_result]:
+  """Convert the SQL database into a list of qs_result objects.
+  """
   debug_test_count = {}
   all_results = []
   no_asr_results = 0
@@ -250,6 +347,8 @@ def save_results_as_csv(all_results: List[QS_result],
   print(f'Results written to {csv_file}')
   return csv_file
 
+######################## Confusion Matrices #########################
+
 
 def accumulate_errors(sum: NDArray, human: ArrayLike, asr: ArrayLike) -> None:
   assert sum.ndim == 2
@@ -267,7 +366,7 @@ def all_test_confusions(all_results: List[QS_result]) -> Dict[str, NDArray]:
   Each confusion matrix is indexed by
     human, asr
   """
-  valid_subject_re = re.compile('A\d+[SP]\d+')
+  valid_subject_re = re.compile(r'A\d+[SP]\d+')
   all_confusions = {}
   for r in all_results:
     if valid_subject_re.match(r.user_name):
@@ -283,6 +382,9 @@ def all_test_confusions(all_results: List[QS_result]) -> Dict[str, NDArray]:
 
 
 def plot_confusions(all_confusions: Dict[str, NDArray]):
+  """For each test type, plot a confusion matrix noting whether the 
+  ASR or the human scorer heard the same keywords.
+  """
   centers = [0, 1]
   for i, test_name in enumerate(all_confusions.keys()):
     plt.subplot(2, 3, i+1)
@@ -306,18 +408,19 @@ def plot_confusions(all_confusions: Dict[str, NDArray]):
       plt.xticks([])
   plt.tight_layout()
 
+######################## Generate HTML Summary Page #########################
 
 def generate_html_report(all_results: List[QS_result],
                          all_ground_truth: Dict[Tuple[str, int, int], str],
                          only_discrepancies: bool = True,
                          filter_tests: List[str] = None,
                          max_number: int = 10000000000) -> Tuple[str, int]:
-  # Generate an HTML report of the inconsistencies
+  # Generate an HTML report of the results, perhaps only the discrepancies.
   html_output = """
   <!DOCTYPE html>
   <html>
   <head>
-  <title>QuickSIN ASR vs Audiologist Discrepancies</title>
+  <title>Online SPIN Test vs Audiologist Discrepancies</title>
   <style>
     table {
       border-collapse: collapse;
@@ -355,14 +458,14 @@ def generate_html_report(all_results: List[QS_result],
     </tr>
   """
 
-  valid_subject_re = re.compile('A\d+[PS]\d+')
+  valid_subject_re = re.compile(r'A\d+[PS]\d+')
   row_count = 0
-  for result in all_results[:max_number]:
+  for result in all_results:
     if not valid_subject_re.match(result.user_name):
       continue
     if filter_tests and result.trials_project not in filter_tests:
       continue
-    # Check if there's any disagreement between audiology_asr_matches
+    # Check if there's any disagreement between audiology vs. asr_matches
     if only_discrepancies and result.annotation_matches == result.asr_matches:
       continue
     html_output += "<tr>"
@@ -371,8 +474,11 @@ def generate_html_report(all_results: List[QS_result],
     html_output += f"<td>{result.trials_trial_number}</td>"
     html_output += f"<td>{result.trials_level_number}</td>"
     # Display ground truth from all_ground_truth dictionary
-    ground_truth = all_ground_truth.get((result.trials_project, result.trials_trial_number, result.trials_level_number), ["N/A"])
-    html_output += f"<td>{', '.join(ground_truth)}</td>"
+    ground_truth = all_ground_truth.get((result.trials_project, 
+                                         result.trials_trial_number, 
+                                         result.trials_level_number), ["N/A"])
+    ground_truth_string = ', '.join(['/'.join(homonym_list) for homonym_list in ground_truth])
+    html_output += f"<td>{ground_truth_string}</td>"
     html_output += f"<td>{', '.join(result.asr_words) if result.asr_words else 'N/A'}</td>"
     html_output += f"<td>{result.annotation_matches}</td>"
     html_output += f"<td>{result.asr_matches}</td>"
@@ -384,8 +490,10 @@ def generate_html_report(all_results: List[QS_result],
     # html_output += f"<td>{result.audiology_asr_matches}</td>"
     audio_url = f"https://quicksin.stanford.edu/uploads/{result.results_reply_filename}.wav"
     html_output += f'<td><audio controls> <source src={audio_url} type=audio/mp4>Your browser does not support the audio element.</audio></td>'
-    html_output += "</tr>"
+    html_output += "</tr>\n"
     row_count += 1
+    if row_count >= max_number:
+      break
 
   html_output += """
   </table>
@@ -394,3 +502,56 @@ def generate_html_report(all_results: List[QS_result],
   </html>
   """
   return html_output, row_count
+
+FLAGS = flags.FLAGS
+
+# Define flags
+flags.DEFINE_string('dbfile', 'experiemnts.db', 
+                    'Sqllite3 database to read the experients results.')
+flags.DEFINE_string('homonyms', 'homonym_list.csv', 
+                    'CSV file containing list of homonyms.')
+# flags.DEFINE_boolean('debug', False, 'Enable debug mode.')
+
+def main(argv):
+  """Main entry point."""
+  assert os.path.exists(FLAGS.dbfile), f'Database file {FLAGS.dbfile} does not exist.'
+  # Prepare the homonym list and then the ground truth.
+  homonym_list = read_homonyms(FLAGS.homonyms, 
+                               # qsb.make_homonyms_dictionary(qsb.homonyms)
+                               )
+  all_ground_truth = process_all_ground_truth(FLAGS.dbfile, homonym_list)
+
+  # Read and normalize the user and asr results from the database.
+  all_query_results = get_all_sql_data(FLAGS.dbfile)
+  all_results = convert_sql_to_results(all_query_results,
+                                       all_ground_truth)
+  csv_file = save_results_as_csv(all_results, 'quicksin_results.csv')
+
+  # Summarize the test results
+  all_confusions = all_test_confusions(all_results)
+  plot_confusions(all_confusions)
+  plt.savefig('confusion_matrices.png')
+
+  html_report, row_count = generate_html_report(
+      all_results, all_ground_truth,
+      only_discrepancies=True,
+      filter_tests=[],
+      max_number=1000)
+
+  with open('asr_audiology_discrepancies.html', 'w') as f:
+    f.write(html_report)
+  print(f'Wrote {row_count} discrepancy rows to asr_audiology_discrepancies.html')
+
+  total_tests = 0
+  total_correct = 0
+  print('Test accuracies:')
+  for test, results in all_confusions.items():
+    num_tests = np.sum(results)
+    num_correct = results[0,0] + results[1,1]
+    total_tests += num_tests
+    total_correct += num_correct
+    print(f'{test}: {num_correct/num_tests*100}%')
+  print(f'Overall: {total_correct/total_tests*100}%')
+
+if __name__ == "__main__":
+    app.run(main)
