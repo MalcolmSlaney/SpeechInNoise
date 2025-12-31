@@ -6,6 +6,7 @@ secret_key_google_text_to_speech
 /*.csv
 /*.html
 /uploads
+/junk*
 
 # Python byte-compiled / optimized / DLL files
 __pycache__/

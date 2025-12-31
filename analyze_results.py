@@ -95,18 +95,36 @@ def read_homonyms(filename: str = 'homonym_list.csv',
   return homonym_list
 
 
-def format_homonyms(current_word, homonym_dict: Dict[str, set[str]]) -> set[str]:
+def format_homonyms(current_word, 
+                    homonym_dict: Dict[str, set[str]],
+                    keep_hyphens: bool = False) -> set[str]:
   """Given a new word and the homonym dictionary, return the full set of 
   homonyms as a set of words.
+
+  When preparing the ground truth, we want to keep any hyphenated words so we
+  can process them correctly later.
   """
   current_words = set(current_word.split('/'))
   all_words = set()
   for word in current_words:
+    word = normalize_word(word, keep_hyphens=keep_hyphens)
     all_words = all_words | set([word])
     if word in homonym_dict:
       all_words = all_words | homonym_dict[word]
   return all_words
 
+def split_words(original_list: list[str], 
+                word: str, 
+                new_words: list[str]) -> list[str]:
+  """Split a word in a list of words, replacing the original word with the new words."""
+  result = []
+  for w in original_list:
+    if w == word:
+      print(f'Splitting {word} into {new_words}')
+      result.extend(new_words)
+    else:
+      result.append(w)
+  return result
 
 def process_all_ground_truth(db_file: str,
                              homonym_list: Dict[str, set[str]]) -> Dict[Tuple[str, int, int], list[set]]:
@@ -122,12 +140,9 @@ def process_all_ground_truth(db_file: str,
     list_number = t[5]
     sentence_number = t[4]
     word_list = t[7].lower().split(' ') # a list of words (some with / to separate homonyms)
-    ground_truth = [format_homonyms(word, homonym_list) for word in word_list]
+    ground_truth = [format_homonyms(word, homonym_list, keep_hyphens=True) 
+                    for word in word_list]
     all_ground_truth[(test_name, list_number, sentence_number)] = ground_truth
-    if 'toad' in ground_truth or 'toed' in ground_truth:
-      print(f'Found {ground_truth} in {test_name} list {list_number} sentence {sentence_number}')
-  print(f'Prepared ground truth for {test_name}, {list_number}, {sentence_number} is {ground_truth}')
-  print(f'Prepared ground truth for qs3/6/6 is {all_ground_truth[("quick", 6, 6)]}')
   return all_ground_truth
 
 
@@ -177,16 +192,19 @@ class QS_result:
   audiology_asr_matches: Optional[List[bool]] = None
 
 
-def normalize_word(word: str) -> str:
+def normalize_word(word:str, keep_hyphens:bool = False) -> str:
   """Remove all but the letters in a word."""
+  if keep_hyphens:
+    return re.sub(r'[^\w-]', '', word.lower())
   return re.sub(r'[^\w]', '', word.lower())
 
 def normalize_results(a_result: QS_result) -> QS_result:
   """Normalize one result object.  This involves the following steps:
   1) Convert user names that look random into fixed user names
-  2) Convert the ASR result from JSON to a dictionary 
+  2) Convert the ASR result from a setence to a list of words
   3) Convert the annotation matches (audiologist judgements) from JSON to a list of booleans
-  4) Convert the ground truth from CSV to a list of words
+  4) # Convert the ground truth from CSV to a list of words
+     # no longer needed since we collect the ground truth at scoring time
   5) Finally, convert the human recognition results into a list of recognized words.
 
   Return the original result object after these enhancements.
@@ -199,7 +217,7 @@ def normalize_results(a_result: QS_result) -> QS_result:
     a_result.annotation_matches = json.loads(a_result.annotation_matches)
 
   if isinstance(a_result.trials_answer, str):
-    a_result.trials_answer = a_result.trials_answer.split(',')
+    a_result.trials_answer = a_result.trials_answer.split(' ')
 
   # Split recognition into a list of words
   a_result.asr_words = []
@@ -207,9 +225,41 @@ def normalize_results(a_result: QS_result) -> QS_result:
       a_result.asr_results['segments'] and
       'words' in a_result.asr_results['segments'][0]):
     # Remove punctation and spaces to normalize ASR results
-    a_result.asr_words = [normalize_word(w['word'])
-                          for w in a_result.asr_results['segments'][0]['words']]
+    asr_words = [w['word'] for w in a_result.asr_results['segments'][0]['words']]
+    a_result.asr_words = asr_words
   return a_result
+
+
+def asr_match(desired_word_set: Union[set[str], str], 
+             recognized_words: dict) -> Tuple[bool, float]:
+  """Determine if we can find a keyword in the recognized words.
+  Slightly more complicated in cases of hyphenated words.
+  
+  Recognized_word is a dictionary with 'word', 'start', 'end', 'prob' fields.
+  
+  Returns:
+    is_match:bool, 
+    start_time:float
+  """
+  if isinstance(desired_word_set, set):
+    # Did the ASR recognize any of the words in the homonym set?
+    results = [asr_match(w, recognized_words) for w in desired_word_set]
+    return any(r[0] for r in results), results[0][1]  # Return first recognized word
+  elif isinstance(desired_word_set, str):
+    desired_word:str = desired_word_set
+    if '-' in desired_word[1:]:  # Ignore leading hyphen
+      parts = desired_word.split('-')
+      parts[1] = set([parts[1], '-' + parts[1]])
+      results = [asr_match(w, recognized_words) for w in parts]
+      has_all_parts = all(r[0] for r in results)
+      return has_all_parts, results[0][0]  # Return first recognized time
+    for reco in recognized_words:
+        asr_word = normalize_word(reco['word'])
+        desired_word = normalize_word(desired_word)
+        if asr_word == desired_word:
+          return True, reco['start']
+    return False, np.nan
+  raise ValueError(f'Unknown type for desired_word_set: {type(desired_word_set)}')
 
 
 def score_asr_system(a_result: QS_result,
@@ -217,8 +267,6 @@ def score_asr_system(a_result: QS_result,
                                             list[set[str]]],
                      debug: bool = False):
   # Score the ASR results, creating a list of true/false
-  # ground_truth = all_keyword_dict[(a_result.trials_trial_number-1,
-  #                                  a_result.trials_level_number-1)]
   # ground truth is a list of sets of words, one set per keyword
   ground_truth = all_ground_truth[(a_result.trials_project,
                                    a_result.trials_trial_number,
@@ -235,15 +283,11 @@ def score_asr_system(a_result: QS_result,
       a_result.asr_results['segments'] and
       'words' in a_result.asr_results['segments'][0]):
     for word_truth_set in ground_truth:
-      for reco in a_result.asr_results['segments'][0]['words']:
-        word = normalize_word(reco['word'])
-        if word in word_truth_set:
-          word_matches.append(True)
-          match_times.append(reco['start'])
-          break
-      else:
-        word_matches.append(False)
-        match_times.append(np.nan)
+      # For each word in the ground truth, see if ASR found it
+      is_match, word_time = asr_match(word_truth_set,
+                                      a_result.asr_results['segments'][0]['words'])
+      word_matches.append(is_match)
+      match_times.append(word_time)
   else:
     # Handle cases where segments or words are missing
     # For example, you could set all matches to False and times to NaN
