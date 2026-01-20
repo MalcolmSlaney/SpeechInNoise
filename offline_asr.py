@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     if args.force:
         model_type = "default" if args.asr == "WhisperASR" else "prompted"
-        deduplicate(args.dbfile, model_name=args.model, model_type=model_type)
+        deduplicate(model_name=args.model, model_type=model_type)
     
     main(getattr(asr, args.asr)(args.model), args.dbfile)
 
