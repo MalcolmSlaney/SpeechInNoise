@@ -9,6 +9,7 @@ nohup.out
 /output.mp3
 /output.wav
 /consent_form_uploads
+/test_config.py
 
 # Python byte-compiled / optimized / DLL files
 __pycache__/

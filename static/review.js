@@ -943,8 +943,11 @@ class ReviewAudio extends AudioPrefetch {
   }
 
   aux_data() {
-    return Array.from(document.querySelectorAll(".annotation-on")).map(
-      x => x.checked)
+    if (this.annotationManager) {
+      return this.annotationManager.getAnnotationData();
+    } else {
+      return Array.from(document.querySelectorAll(".annotation-on")).map(x => x.checked);
+    }
   }
 
 
@@ -1123,3 +1126,4 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // Create ReviewAudio instance
 let audio = new ReviewAudio("review");
+
