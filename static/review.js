@@ -396,7 +396,7 @@ class ReviewAudio extends AudioPrefetch {
           warningEl.style.cssText = 'position: absolute; bottom: 90px; right: 15px; color: #dc3545; font-size: 18px; font-weight: 500; display: none; text-align: right; white-space: nowrap;';
         }
         
-        warningEl.textContent = window.ReviewModules?.WARNING_MESSAGE || 'Please fill out your review before exiting.';
+        warningEl.textContent = window.ReviewModules?.WARNING_MESSAGE || 'Please listen to the audio and fill out your review before exiting.';
         exitBtn.parentElement.appendChild(warningEl);
       }
     } else {
@@ -553,16 +553,37 @@ class ReviewAudio extends AudioPrefetch {
   }
 
   autostart() { 
-    return false; 
+    // Don't autoplay if we're exiting or if it's the first file
+    if (this._exiting) {
+      return false;
+    }
+    // Don't autoplay the first file, but autoplay all subsequent files
+    return !this._initialLoad;
   }
   
-  // Override loaded() to prevent autoplay
+  // Override loaded() to handle autoplay based on initial load state
   loaded() {
-    if (this.autostart && this.autostart()) {
-      // Only autoplay if autostart() returns true
+    // Don't autoplay if we're exiting
+    if (this._exiting) {
+      if (this.ready) {
+        this.ready()
+      }
+      return;
+    }
+    
+    // Check if this is the initial load before modifying _initialLoad
+    const isInitialLoad = this._initialLoad;
+    
+    // Mark that we've loaded at least one file (so subsequent files will autoplay)
+    if (this._initialLoad) {
+      this._initialLoad = false;
+    }
+    
+    if (!isInitialLoad && this.autostart && this.autostart()) {
+      // Autoplay subsequent files (not the first one)
       super.loaded()
     } else {
-      // Don't autoplay - just mark as ready
+      // just mark as ready
       if (this.ready) {
         this.ready()
       }
@@ -676,6 +697,11 @@ class ReviewAudio extends AudioPrefetch {
       .then(response => {
         if (!response.ok) {
           this._startCalled = false
+          // If unauthorized or bad request (i.e. no session), redirect to login
+          if (response.status === 400 || response.status === 401) {
+            window.location.href = "/jnd/api/review/";
+            return response; // Return response to prevent further processing
+          }
         }
         // Return the response object so parent can process it
         // The parent will call response.json() and then load() with the data
@@ -772,6 +798,10 @@ class ReviewAudio extends AudioPrefetch {
       this._exiting = false; // Reset flag
       const username = this._currentUsername || (document.getElementById('username-text')?.textContent) || 'Reviewer';
       this.showThankYouPage({ name: username });
+      // Clear the session and log out the user (don't show thank you page again)
+      fetch('/jnd/api/review/reset', { method: 'POST' }).catch(() => {
+        // Ignore errors - we've already shown the thank you page
+      });
       return;
     }
     
@@ -952,6 +982,16 @@ class ReviewAudio extends AudioPrefetch {
 
 
   showThankYouPage(data) {
+    // Stop and clear any playing audio
+    const audioElement = this.audioManager ? this.audioManager.getAudioElement() : document.getElementById('playing');
+    if (audioElement) {
+      audioElement.pause();
+      audioElement.currentTime = 0;
+      // Remove the src to prevent any further playback
+      audioElement.removeAttribute('src');
+      audioElement.load();
+    }
+    
     if (this.thankYouPage) {
       this.thankYouPage.show(data);
     } else {
@@ -960,6 +1000,14 @@ class ReviewAudio extends AudioPrefetch {
       const nextWrapper = document.getElementById('next-wrapper');
       if (interactive) interactive.style.display = 'none';
       if (nextWrapper) nextWrapper.style.display = 'none';
+      
+      // Disable the exit button
+      const exitBtn = document.getElementById('exit-session-btn');
+      if (exitBtn) {
+        exitBtn.disabled = true;
+        exitBtn.style.opacity = '0.5';
+        exitBtn.style.cursor = 'not-allowed';
+      }
       
       const footer = document.getElementById('footer');
       if (footer) {

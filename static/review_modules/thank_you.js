@@ -19,10 +19,28 @@
     show(data) {
       const name = data.name || 'Reviewer';
       
+      // Stop and clear any playing audio
+      const audioElement = this.dom.get('AUDIO_ELEMENT');
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+        // Remove the src to prevent any further playback
+        audioElement.removeAttribute('src');
+        audioElement.load();
+      }
+      
       // Hide the next wrapper
       const nextWrapper = this.dom.get('NEXT_WRAPPER');
       if (nextWrapper) {
         nextWrapper.style.display = 'none';
+      }
+
+      // Disable the exit button
+      const exitBtn = this.dom.get('EXIT_SESSION_BUTTON');
+      if (exitBtn) {
+        exitBtn.disabled = true;
+        exitBtn.style.opacity = '0.5';
+        exitBtn.style.cursor = 'not-allowed';
       }
 
       // Show thank you message in the main content area

@@ -43,8 +43,8 @@ class APIBlueprint(DatabaseBP):
         }
         assert self.default_project in self.projects and "" not in self.projects
         for bp in self.projects.keys():
-            self.projects[bp] = self.projects[bp](db)
-            self.register_blueprint(self.projects[bp])
+                self.projects[bp] = self.projects[bp](db)
+                self.register_blueprint(self.projects[bp])
         self._route_db("/username-available")(username_available)
         self._route_db("/set-username")(username_hook)
         self._route_db("/authorized", methods=["POST"])(authorized)

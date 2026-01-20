@@ -154,8 +154,10 @@ def review_result(db):
 def review_reset(db):
     """Reset session and log out user. Progress is preserved in database."""
     try:
-        for key in ["cur", "current_test", "current_level", "played_audio", "current_test_total_files", "last_reviewed_subject", "username", "user", "meta"]: 
-            session.pop(key, None)
+        # Clear the entire session to fully log out the user
+        session.clear()
+        # Also mark session as modified to ensure cookie is cleared
+        session.permanent = False
         return json.dumps({"status": "success"})
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})

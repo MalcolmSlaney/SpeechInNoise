@@ -41,7 +41,7 @@
             warningEl.style.cssText = 'position: absolute; bottom: 90px; right: 15px; color: #dc3545; font-size: 18px; font-weight: 500; display: none; text-align: right; white-space: nowrap;';
           }
 
-          warningEl.textContent = WARNING_MESSAGE || 'Please fill out your review before exiting.';
+          warningEl.textContent = WARNING_MESSAGE || 'Please listen to the audio and fill out your review before exiting.';
           exitBtn.parentElement.appendChild(warningEl);
         }
       } else {

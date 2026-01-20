@@ -48,5 +48,5 @@ window.ReviewModules.WARNING_STYLES = {
   WHITE_SPACE: 'nowrap'
 };
 
-window.ReviewModules.WARNING_MESSAGE = 'Please fill out your review before exiting.';
+window.ReviewModules.WARNING_MESSAGE = 'Please listen to the audio and fill out your review before exiting.';
 
