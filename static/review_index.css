@@ -1,0 +1,227 @@
+
+
+/* Center body content */
+body {
+  text-align: center !important;
+}
+
+#content {
+  text-align: center !important;
+  width: 100%;
+  margin: 0 auto;
+  display: block !important;
+}
+
+#instructions {
+  text-align: left !important;
+}
+
+/* elements are centered */
+.userbox {
+  text-align: center !important;
+  margin: 0 auto;
+}
+
+#samples {
+  text-align: center !important;
+  margin: 0 auto;
+  display: flex;
+  gap: 40px;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.mic-test {
+  text-align: center !important;
+  margin: 0 auto;
+}
+
+#results {
+  text-align: center !important;
+  margin: 0 auto;
+  display: block;
+}
+
+/* Center form labels */
+.userbox label {
+  text-align: center !important;
+}
+
+/* Center selects */
+.userbox select {
+  margin: 0.5rem auto !important;
+  display: block;
+}
+
+/* Center project name in header - balance flexbox without username */
+#header {
+  position: relative !important;
+  justify-content: space-between !important;
+}
+
+#header #org {
+  flex: 0 0 auto !important;
+  width: auto !important;
+}
+
+#header #project {
+  position: absolute !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  text-align: center !important;
+  flex-grow: 0 !important;
+  /* font-size: 24px !important; */
+}
+
+#header::after {
+  content: "" !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
+}
+
+#three-column-row .column {
+  text-align: center;
+  padding: 0 1rem;
+  box-sizing: border-box;
+}
+
+/* center stanford icon */
+.org-icon-container {
+  display: block !important;
+  margin: 2rem auto 0 auto !important;
+  text-align: center !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.org-icon-container .org-icon {
+  display: block !important;
+  margin: 0 auto !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  transform: none !important;
+}
+
+/* Waveform canvas styling */
+#example-waveform-canvas {
+  width: 100%;
+  max-width: 300px;
+  height: 60px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+}
+
+/* Example scoring interface styles */
+#example-aux-data {
+  padding: 5% 5% 5% 0;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* from audio.css  */
+#example-aux-data .option-on,
+#example-result-none {
+  background: var(--record) !important;
+}
+
+#example-result-options {
+  order: 1;
+  text-align: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+#example-aux-data .annotation {
+  display: none;
+}
+
+#example-aux-data .option {
+  display: block;
+  text-align: center;
+}
+
+#example-aux-data .annotation:checked + .option {
+  display: none;
+}
+
+#example-aux-data .annotation:invalid + .option {
+  background: var(--soft-grey) !important;
+}
+
+#example-aux-data .annotation:not(:checked) ~ .annotation:not(:checked) + .option {
+  display: none;
+}
+
+/* base-button styles - words and All/None buttons */
+#example-aux-data .option.base-button,
+#example-result-all,
+#example-result-none {
+  font-family: var(--compact);
+  color: white;
+  font-size: var(--description-size);
+  padding: var(--next-audio-padding);
+  border-radius: var(--next-audio-padding);
+  cursor: pointer;
+  border: 0.15rem solid var(--soft-grey);
+}
+
+/* display: block from .option takes precedence over inline-block for .option.base-button */
+#example-result-all,
+#example-result-none {
+  display: inline-block;
+}
+
+/* When annotation-off is checked, option-on shows and should be red */
+#example-aux-data .annotation-off:checked ~ .annotation-on:not(:checked) + .option-on {
+  background: var(--record) !important;
+}
+
+/* When annotation-on is checked, option-off shows and should be blue */
+#example-aux-data .annotation-on:checked ~ .annotation-off:not(:checked) + .option-off {
+  background: var(--interact) !important;
+}
+
+#example-result-all {
+  background: var(--interact); /* Blue */
+}
+
+/* Instructions heading */
+#instructions h1 {
+  text-align: center;
+}
+
+/* Audio example container */
+#samples > div:first-child > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Experience input fields - hidden by default */
+#experience-years,
+#experience-years-label {
+  display: none;
+}
+
+.userbox #username-status {
+  display: block !important;
+  clear: both !important;
+  max-width: 150px !important;
+  width: auto !important;
+  min-width: 0 !important;
+  /* margin: 0.5rem auto 0 auto !important;
+  padding: 0 1rem !important; */
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  white-space: normal !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+  hyphens: auto;
+}
+

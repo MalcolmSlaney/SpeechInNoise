@@ -1,0 +1,154 @@
+/* Review-specific styles */
+
+.playback-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 1 1 0;
+  padding: 0 var(--description-padding);
+  gap: 10px;
+}
+
+.playback-container .playback-interface {
+  margin: 0;
+}
+
+.playback-container #audio-description {
+  text-align: center;
+  margin: 0;
+  flex: 0 0 auto;
+  display: block;
+  align-self: center;
+}
+
+#waveform-canvas {
+  background-color: var(--soft-grey) !important;
+  width: calc(var(--container-size) + var(--border-value) * 2);
+  height: 60px;
+  border: 1px solid #ddd;
+  border-radius: var(--next-audio-padding);
+  background-color: var(--soft-grey);
+  display: block;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+#audio-progress-container {
+  display: none !important;
+}
+
+/* Header username column styling for review page */
+#header #username {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: end;
+  text-align: right;
+  gap: 0.2rem;
+  min-width: 0; /* Allow flex item to shrink */
+}
+
+/* This was only working in-line */
+/* #header #project {
+  font-size: 12px !important;
+} */
+
+/* When username wraps to new line left-align it */
+@media (max-width: 1200px) {
+  #header #username {
+    align-self: flex-start;
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
+#header #username > span {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* adapting the header: switch to single column with left alignment on small screens */
+@media (max-width: 800px) {
+  #header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  #header #org,
+  #header #project {
+    text-align: left;
+    width: 100%;
+  }
+  
+  #header #project {
+    flex-grow: 0;
+    font-size: 12px !important;
+  }
+  
+  #header #username {
+    align-self: flex-start;
+    align-items: flex-start;
+    text-align: left;
+    width: 100%;
+  }
+}
+
+#content {
+  overflow: hidden;
+}
+
+#interactive {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#main-content-wrapper {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#footer {
+  flex-shrink: 0;
+}
+
+/* Responsive scaling for scoring buttons to prevent scrolling */
+.options-case {
+  gap: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.options-case .option.base-button,
+#result-options .base-button {
+  font-size: clamp(1.1rem, 3.5vh, var(--description-size));
+  padding: clamp(0.7rem, 2.2vh, var(--next-audio-padding));
+  border-radius: clamp(0.7rem, 2.2vh, var(--next-audio-padding));
+  margin: 0;
+}
+
+.options-case .option.base-button {
+  border-width: clamp(0.1rem, 0.3vh, 0.15rem);
+}
+
+#result-options {
+  display: flex;
+  flex-direction: row;
+  gap: clamp(0.5rem, 1.5vh, 1rem);
+  margin-bottom: 0;
+}
+
+#unclear-checkbox-label {
+  font-size: clamp(1.2rem, 2.8vh, 1.6rem) !important;
+  margin: clamp(0.6rem, 1.5vh, 1.2rem) 0 0 0 !important;
+}
+
+#aux-data {
+  max-height: 100%;
+  overflow: hidden;
+  padding: clamp(2%, 2vh, 5%);
+}
