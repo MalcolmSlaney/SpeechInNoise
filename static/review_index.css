@@ -12,6 +12,8 @@ body {
   display: block !important;
 }
 
+/* Instructions: block is centered via max-width + margin:auto from index.css */
+/* Text inside should be left-aligned */
 #instructions {
   text-align: left !important;
 }

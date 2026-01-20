@@ -55,7 +55,7 @@
           
           <div id="new-fields" style="display:none">
             1. Download blank consent form: <br>
-            <button type="button" id="download-consent-btn" onclick="const link = document.createElement('a'); link.href = 'var/www/jnd.emily/static/review_modules/consent_form_for_raters.pdf'; link.download = 'consent_form.pdf'; link.click();">Download Consent Form Here</button> 
+            <button type="button" id="download-consent-btn" onclick="(function() { const url = '/jnd/api/static/review_modules/consent_form_export.pdf'; fetch(url).then(response => { if (!response.ok) throw new Error('HTTP ' + response.status); return response.blob(); }).then(blob => { if (blob.type !== 'application/pdf' && blob.size === 0) throw new Error('Invalid PDF data'); const blobUrl = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = blobUrl; link.download = 'consent_form.pdf'; link.style.display = 'none'; document.body.appendChild(link); link.click(); setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(blobUrl); }, 100); }).catch(err => { console.error('Download failed:', err); window.open(url, '_blank'); }); })();">Download Consent Form Here</button> 
             <br> <br>
             2. Upload your signed consent form: <br>
             <input type="file" id="filled-consent-form" name="filled-consent-form"> <br> <br>
