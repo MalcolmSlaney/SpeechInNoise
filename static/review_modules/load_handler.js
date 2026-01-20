@@ -189,7 +189,7 @@
     _handlePreviousError(context) {
       if (context._lastError) {
         const errorMsg = context._lastError.includes('FOREIGN KEY')
-          ? 'Warning: The previous annotation may not have been saved.'
+          ? 'Warning: The previous annotation may not have been saved. Please contact support if this persists.'
           : `Warning: ${context._lastError}`;
         setTimeout(() => console.warn(errorMsg), 100);
         context._lastError = null;
