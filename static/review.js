@@ -628,6 +628,12 @@ class ReviewAudio extends AudioPrefetch {
 
   // Override src() to validate URLs and prevent setting invalid sources
   src(url) {
+    // Block src() calls during result()
+    // set the new URL in load() instead
+    if (this._inResultCall) {
+      return;
+    }
+    
     const strUrl = String(url || '')
     
     // Block empty strings, project name, or "#playing" selector
@@ -905,10 +911,18 @@ class ReviewAudio extends AudioPrefetch {
   }
 
   async result(key, f=undefined) {
-    if (this.resultHandler) {
-      await this.resultHandler.submitResult(this, super.result, key);
-    } else {
-      await this._resultFallback(key);
+    // Store a flag to block src() calls during result()
+    this._inResultCall = true;
+    const currentAudioSrc = this.audioManager ? this.audioManager.getAudioElement()?.src : document.getElementById('playing')?.src;
+    
+    try {
+      if (this.resultHandler) {
+        await this.resultHandler.submitResult(this, super.result, key);
+      } else {
+        await this._resultFallback(key);
+      }
+    } finally {
+      this._inResultCall = false;
     }
   }
   
