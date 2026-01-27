@@ -274,7 +274,8 @@ def score_asr_system(a_result: QS_result,
   word_matches = []
   match_times = []
   # Parse the JSON result, if we haven't already done that.
-  if isinstance(a_result.asr_results, str):
+  if isinstance(a_result.asr_results, str) and a_result.asr_results:
+    # print('Trying to parse ASR results for', a_result.asr_results)
     a_result.asr_results = json.loads(a_result.asr_results)
   if isinstance(a_result.annotation_matches, str):
     a_result.annotation_matches = json.loads(a_result.annotation_matches)
@@ -410,7 +411,8 @@ def all_test_confusions(all_results: List[QS_result]) -> Dict[str, NDArray]:
   Each confusion matrix is indexed by
     human, asr
   """
-  valid_subject_re = re.compile(r'A\d+[SP]\d+')
+  # valid_subject_re = re.compile(r'A\d+[SP]\d+')  # Includes pilot subjects
+  valid_subject_re = re.compile(r'A\d+[S]\d+')
   all_confusions = {}
   for r in all_results:
     if valid_subject_re.match(r.user_name):
@@ -452,8 +454,22 @@ def plot_confusions(all_confusions: Dict[str, NDArray]):
       plt.xticks([])
   plt.tight_layout()
 
-######################## Generate HTML Summary Page #########################
 
+def fix_encoding(bad_string: str) -> str:
+  try:
+    fixed_string = bad_string.encode('cp1252').decode('utf-8')
+    print(f"Repaired text: {fixed_string}") 
+    # Output: Боль
+  except (UnicodeEncodeError, UnicodeDecodeError):
+    # Fallback if the string wasn't actually mojibake
+    fixed_string = bad_string
+    print("Could not repair string, using original.")
+  # 3. ENCODE: Convert the repaired string into HTML entities.
+  # 'xmlcharrefreplace' turns any non-ASCII character into a numeric entity 
+  html_encoded = fixed_string.encode('ascii', 'xmlcharrefreplace').decode('ascii')
+  return html_encoded
+
+######################## Generate HTML Summary Page #########################
 def generate_html_report(all_results: List[QS_result],
                          all_ground_truth: Dict[Tuple[str, int, int], str],
                          only_discrepancies: bool = True,
@@ -502,7 +518,8 @@ def generate_html_report(all_results: List[QS_result],
     </tr>
   """
 
-  valid_subject_re = re.compile(r'A\d+[PS]\d+')
+  # valid_subject_re = re.compile(r'A\d+[PS]\d+')  # Includes pilot subjects
+  valid_subject_re = re.compile(r'A\d+[S]\d+') # Only actual subjects
   row_count = 0
   for result in all_results:
     if not valid_subject_re.match(result.user_name):
@@ -511,6 +528,11 @@ def generate_html_report(all_results: List[QS_result],
       continue
     # Check if there's any disagreement between audiology vs. asr_matches
     if only_discrepancies and result.annotation_matches == result.asr_matches:
+      continue
+
+    # Skip results where ASR recognized only ASCII characters (keep non ascii)
+    # Should be a flag.
+    if all([isinstance(r, str) and r.isascii() for r in result.asr_words]):
       continue
     html_output += "<tr>"
     html_output += f"<td>{result.user_name} {valid_subject_re.match(result.user_name)}</td>"
@@ -523,7 +545,7 @@ def generate_html_report(all_results: List[QS_result],
                                          result.trials_level_number), ["N/A"])
     ground_truth_string = ', '.join(['/'.join(homonym_list) for homonym_list in ground_truth])
     html_output += f"<td>{ground_truth_string}</td>"
-    html_output += f"<td>{', '.join(result.asr_words) if result.asr_words else 'N/A'}</td>"
+    html_output += f"<td>{', '.join([fix_encoding(r) for r in result.asr_words]) if result.asr_words else 'N/A'}</td>"
     html_output += f"<td>{result.annotation_matches}</td>"
     html_output += f"<td>{result.asr_matches}</td>"
     # https://www.w3schools.com/charsets/ref_utf_dingbats.asp
@@ -554,6 +576,8 @@ flags.DEFINE_string('dbfile', 'experiemnts.db',
                     'Sqllite3 database to read the experients results.')
 flags.DEFINE_string('homonyms', 'homonym_list.csv', 
                     'CSV file containing list of homonyms.')
+flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html', 
+                    'Where to store the final discrepancy report.')
 # flags.DEFINE_boolean('debug', False, 'Enable debug mode.')
 
 def main(argv):
@@ -582,9 +606,9 @@ def main(argv):
       filter_tests=[],
       max_number=1000)
 
-  with open('asr_audiology_discrepancies.html', 'w') as f:
+  with open(FLAGS.discrepancies, 'w') as f:
     f.write(html_report)
-  print(f'Wrote {row_count} discrepancy rows to asr_audiology_discrepancies.html')
+  print(f'Wrote {row_count} discrepancy rows to {FLAGS.discrepancies}')
 
   total_tests = 0
   total_correct = 0
@@ -594,8 +618,8 @@ def main(argv):
     num_correct = results[0,0] + results[1,1]
     total_tests += num_tests
     total_correct += num_correct
-    print(f'{test}: {num_correct/num_tests*100}%')
-  print(f'Overall: {total_correct/total_tests*100}%')
+    print(f'{test}: {num_correct/num_tests*100:.2f}%')
+  print(f'Overall: {total_correct/total_tests*100:.2f}%')
 
 if __name__ == "__main__":
     app.run(main)
