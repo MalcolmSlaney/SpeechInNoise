@@ -85,7 +85,7 @@ def reviewer_set_username(db):
                 return json.dumps({"error": "Years of practice must be a valid number."}, indent=4), 400
     
     # Handle consent form validation and reviewer database
-    review_db_path = os.environ.get("SELECTED_DATABASE", relpath("backup.db"))
+    review_db_path = os.environ.get("SELECTED_DATABASE", relpath("experiments.db"))
     max_retries = 5
     retry_delay = 0.1
     

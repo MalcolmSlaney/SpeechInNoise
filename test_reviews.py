@@ -7,7 +7,7 @@ import os
 def relpath(*args):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), *args)
 
-SELECTED_DATABASE = os.environ.get("SELECTED_DATABASE", relpath("backup.db"))
+SELECTED_DATABASE = os.environ.get("SELECTED_DATABASE", relpath("experiments.db"))
 
 conn = sqlite3.connect(SELECTED_DATABASE)
 conn.execute("PRAGMA foreign_keys = ON")

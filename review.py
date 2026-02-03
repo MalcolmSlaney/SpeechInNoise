@@ -7,7 +7,7 @@ from review_modules import state, queries, file_selection, responses
 
 # Database configuration - change this to use a different database
 # You can also set SELECTED_DATABASE environment variable to override this
-SELECTED_DATABASE = os.environ.get("SELECTED_DATABASE", relpath("backup.db"))
+SELECTED_DATABASE = os.environ.get("SELECTED_DATABASE", relpath("experiments.db"))
 REVIEW_SCHEMA = relpath("schema.sql")
 
 def ensure_user_in_review_db(db, username, ip_address=None):

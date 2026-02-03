@@ -30,11 +30,13 @@
 
 
       This task consists of scoring clinical tests of speech recognition. Please use headphones and make sure you can hear the audio example.
-      Score these as you would in routine clinical practice.
+      <br><br>
+      <strong><u>Score these as you would in routine clinical practice.</u></strong>
+      <br><br>
       <strong><u>You may only listen to each playback once.</u></strong>
       <br><br>
       The key words are displayed to the right of the audio.
-      Score each word correct (blue) or incorrect (red) by clicking it.
+      Score each word correct (blue) or incorrect (red) by clicking the word.
       The "All" button marks all key words correct and "None" marks all key words incorrect.
 
       <br><br>
@@ -59,9 +61,10 @@
             <br> <br>
             2. Upload your signed consent form: <br>
             <input type="file" id="filled-consent-form" name="filled-consent-form"> <br> <br>
-            3. Demographic information:<br>
+            3. Language information:<br>
             I am a native English speaker: <input type="checkbox" id="storage" />
             <br>
+            4. Demographic information:<br>
             I am a(n): <select id="role" onchange="updateExperienceField()">
               <option value="">Select...</option>
               <option value="student">Audiology Student</option>
@@ -118,13 +121,13 @@
         <img class="org-icon" />
       </div>
       <!-- buttons for test type - change to only patient when we are collecting data -->
-      <input type="radio" id="prepilot" name="test-type" checked />
+      <!-- <input type="radio" id="prepilot" name="test-type" />
       <label for="prepilot">prepilot</label>
       <span class="h-radio-spacer"></span>
       <input type="radio" id="pilot" name="test-type" />
       <label for="pilot">pilot</label>
-      <span class="h-radio-spacer"></span>
-      <input type="radio" id="patient" name="test-type" />
+      <span class="h-radio-spacer"></span> -->
+      <input type="radio" id="patient" name="test-type" checked />
       <label for="patient">Collecting Data</label>
     </form>
     <br><br>
