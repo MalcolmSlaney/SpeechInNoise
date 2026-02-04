@@ -411,8 +411,7 @@ def all_test_confusions(all_results: List[QS_result]) -> Dict[str, NDArray]:
   Each confusion matrix is indexed by
     human, asr
   """
-  # valid_subject_re = re.compile(r'A\d+[SP]\d+')  # Includes pilot subjects
-  valid_subject_re = re.compile(r'A\d+[S]\d+')
+  valid_subject_re = re.compile('A\d+[SP]\d+')
   all_confusions = {}
   for r in all_results:
     if valid_subject_re.match(r.user_name):
@@ -475,7 +474,7 @@ def generate_html_report(all_results: List[QS_result],
                          only_discrepancies: bool = True,
                          filter_tests: List[str] = None,
                          max_number: int = 10000000000) -> Tuple[str, int]:
-  # Generate an HTML report of the results, perhaps only the discrepancies.
+  # Generate an HTML report of the inconsistencies
   html_output = """
   <!DOCTYPE html>
   <html>
@@ -518,10 +517,9 @@ def generate_html_report(all_results: List[QS_result],
     </tr>
   """
 
-  # valid_subject_re = re.compile(r'A\d+[PS]\d+')  # Includes pilot subjects
-  valid_subject_re = re.compile(r'A\d+[S]\d+') # Only actual subjects
+  valid_subject_re = re.compile('A\d+[PS]\d+')
   row_count = 0
-  for result in all_results:
+  for result in all_results[:max_number]:
     if not valid_subject_re.match(result.user_name):
       continue
     if filter_tests and result.trials_project not in filter_tests:
