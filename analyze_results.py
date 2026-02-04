@@ -1,3 +1,6 @@
+## Analyze results from all the online subject data, perform speech 
+## recognition, and compare to audiologist judgements.
+
 from absl import app, flags
 import csv
 from dataclasses import dataclass
