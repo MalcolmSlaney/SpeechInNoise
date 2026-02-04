@@ -18,7 +18,8 @@ class WhisperASR:
         self.meta = {"model_name": model_name, "model_type": "default"}
 
     def __call__(self, audio_path):
-        res = self.model.transcribe(audio_path, word_timestamps=True)
+        res = self.model.transcribe(audio_path, word_timestamps=True,
+                                    language="en")
         return {**res, **self.meta}
 
 # can be overly generous
@@ -29,7 +30,8 @@ class PromptedWhisperASR:
 
     def __call__(self, audio_path, answer):
         res = self.model.transcribe(
-                audio_path, word_timestamps=True, initial_prompt=answer)
+                audio_path, word_timestamps=True, initial_prompt=answer,
+                language="en")
         return {**res, **self.meta}
 
 

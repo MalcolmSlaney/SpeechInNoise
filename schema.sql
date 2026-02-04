@@ -62,7 +62,7 @@ CREATE TABLE audio_trials (
   level_number INTEGER, /* which sentence in this list */
   trial_number INTEGER, /* which QuickSIN list */
   filename TEXT, /* basename, not path */
-  answer TEXT, /* Ground truth answer */
+  answer TEXT, /* Ground truth answer, space separated list of words */
   active BOOLEAN NOT NULL CHECK(active IN(0,1)) /* version control */
 );
 
