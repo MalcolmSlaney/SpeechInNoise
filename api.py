@@ -43,12 +43,20 @@ class APIBlueprint(DatabaseBP):
         }
         assert self.default_project in self.projects and "" not in self.projects
         for bp in self.projects.keys():
-            self.projects[bp] = self.projects[bp](db)
-            self.register_blueprint(self.projects[bp])
+                self.projects[bp] = self.projects[bp](db)
+                self.register_blueprint(self.projects[bp])
         self._route_db("/username-available")(username_available)
         self._route_db("/set-username")(username_hook)
         self._route_db("/authorized", methods=["POST"])(authorized)
         self._route_db("/lists", methods=["POST"])(self.audio_lists)
+        from storage import relpath
+        from flask import send_from_directory
+        def review_html_handler(db):
+            from flask import session, redirect
+            if not session.get("username") and not session.get("user"):
+                return redirect("/jnd/api/review/")
+            return send_from_directory(relpath("static"), "review.html")
+        self._route_db("/review.html")(review_html_handler)
 
     def _bind_db(self, app):
         super()._bind_db(app)
@@ -141,4 +149,3 @@ def set_username(db):
 
 def authorized(db):
     return json.dumps(True)
-

@@ -1,8 +1,16 @@
 nohup.out
 /secret_key
+/secret_key_google_text_to_speech
 /static/audio
 /experiments.db
 /uploads
+/test_config.py
+*.db
+*db
+/output.mp3
+/output.wav
+/consent_form_uploads
+/test_config.py
 
 # Python byte-compiled / optimized / DLL files
 __pycache__/
@@ -21,3 +29,19 @@ venv.bak/
 # Flask stuff:
 instance/
 .webassets-cache
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Backup and temporary files
+*.save
+*.tmp.wav
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
