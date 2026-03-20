@@ -573,7 +573,7 @@ def generate_html_report(all_results: List[QS_result],
 FLAGS = flags.FLAGS
 
 # Define flags
-flags.DEFINE_string('dbfile', 'experiemnts.db', 
+flags.DEFINE_string('dbfile', 'experiments.db', 
                     'Sqllite3 database to read the experients results.')
 flags.DEFINE_string('homonyms', 'homonym_list.csv', 
                     'CSV file containing list of homonyms.')
