@@ -67,12 +67,16 @@ if __name__ == "__main__":
             action="store_const", const="PromptedWhisperASR", help=(
                 "use the correct answer as the model prompt; can help accuracy "
                 "but can also bias results towards correct"))
+    parser.add_argument(
+            "--test", action="", help=("Run a test on a single audio file"
+    )
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
     if args.force:
         model_type = "default" if args.asr == "WhisperASR" else "prompted"
         deduplicate(args.dbfile, model_name=args.model, model_type=model_type)
+    
     
     main(getattr(asr, args.asr)(args.model), args.dbfile)
 
