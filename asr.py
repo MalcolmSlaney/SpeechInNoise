@@ -17,7 +17,7 @@ class WhisperASR:
         self.model = whisper.load_model(model_name)
         self.meta = {"model_name": model_name, "model_type": "default"}
 
-    def __call__(self, audio_path):
+    def recognize(self, audio_path):
         res = self.model.transcribe(audio_path, word_timestamps=True,
                                     language="en")
         return {**res, **self.meta}
@@ -28,7 +28,7 @@ class PromptedWhisperASR:
         self.model = whisper.load_model(model_name)
         self.meta = {"model_name": model_name, "model_type": "prompted"}
 
-    def __call__(self, audio_path, answer):
+    def recognize(self, audio_path, answer):
         res = self.model.transcribe(
                 audio_path, word_timestamps=True, initial_prompt=answer,
                 language="en")
