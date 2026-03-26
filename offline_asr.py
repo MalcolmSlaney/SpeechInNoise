@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime
 import json
 import os
 import pathlib
@@ -81,7 +82,7 @@ def assemble_words(asr_result: dict):
 def filter_words(words: List[dict], prompt_time: float):
   results = []
   for word in words:
-    print(f'Checking {word["word"]} ending at {word["end"]}')
+    # print(f'Checking {word["word"]} ending at {word["end"]}')
     if word['start'] < prompt_time:
       continue
     word['start'] -= prompt_time
@@ -90,7 +91,7 @@ def filter_words(words: List[dict], prompt_time: float):
   return results
 
 def filter_segment(segment: dict, prompt_time: float):
-  print(f'Checking segment ending at {segment["end"]}')
+  # print(f'Checking segment ending at {segment["end"]}')
   if segment['end'] < prompt_time:
     return None
   else:
@@ -108,6 +109,7 @@ def adjust_timing(asr_result, prompt_time: float=1):
       new_segments.append(new_segment)
   filtered['segments'] = new_segments
   filtered['text'] = assemble_words(filtered)
+  filtered['note'] = 'Used English prompt'
   return filtered
 
 
@@ -135,28 +137,34 @@ def main(asr_engine: asr.WhisperASREngine,
          db_file: str, 
          single_word_projects: str = '',
          prompt_file: str = ''):
+    print('Offline_ASR started at', datetime.now())
     prompt_length = get_wav_duration_seconds(prompt_file)
     single_word_project_list = single_word_projects.split(',')
+    if single_word_project_list:
+       print('Looking for single words in these test:', 
+             single_word_project_list)
+       print(f' After {prompt_length}s.')
     con = sqlite3.connect(db_file)
+    row_count = 0
     for rowid, fname, project in tqdm(audio_queue(con)):
         try:
             filename = os.path.join(basename, "uploads", fname)
             if project in single_word_project_list:
-                print(rowid, filename, project)
+                print(rowid, filename, project, 'Add English prompt')
                 new_filename = concatenate_audio_files(prompt_file, filename)
                 asr_result = asr_engine.recognize(new_filename)
                 asr_result = adjust_timing(asr_result, prompt_length)
-                pprint(asr_result)
-                return
+                # pprint.pprint(asr_result)
             else:
-              continue
               asr_result = asr_engine.recognize(filename)
             update(con, rowid, asr_result)
+            row_count += 1
         except RuntimeError as e:
             # Code to handle the exception
             print(f"An error occurred: {e}")
             print('While processing', filename)
-            return
+        sys.stdout.flush()
+    print(f'Finished processing {row_count} rows of speech data.')
 
 def deduplicate(db_file: str, **kw):
     con = sqlite3.connect(db_file)

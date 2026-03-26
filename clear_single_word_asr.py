@@ -24,7 +24,7 @@ flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 'Path to the SQLite data
 def main(argv):
     del argv  # Unused, but required by absl.app
 
-    print(f"Connecting to database: {FLAGS.db_path}")
+    print(f"Connecting to database: {FLAGS.dbfile}")
     
     try:
         conn = sqlite3.connect(FLAGS.dbfile)

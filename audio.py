@@ -174,7 +174,7 @@ class AudioBP(DatabaseBP):
         def wrapped(dump=False):
             if dump:
                 return (db, rowid, fpath, answer)
-            reply = self.asr(fpath, answer)
+            reply = self.asr.recognize(fpath, answer)
             db.execute(
                 f"INSERT INTO {self.asr_table} (ref, data) VALUES (?, ?)",
                 (rowid, json.dumps(reply)))
@@ -397,7 +397,7 @@ class AudioWhisperBP(AudioNormalizedBP):
         self.whisper_asr = WhisperASR()
 
     def asr(self, path, answer):
-        return self.whisper_asr(path)
+        return self.whisper_asr.recognize(path)
 
 class AudioPromptedWhisperBP(AudioNormalizedBP):
     def __init__(self, *a, **kw):
@@ -406,7 +406,7 @@ class AudioPromptedWhisperBP(AudioNormalizedBP):
         self.prompted_whisper_asr = PromptedWhisperASR()
 
     def asr(self, path, answer):
-        return self.prompted_whisper_asr(
+        return self.prompted_whisper_asr.recognize(
             path, answer.replace("/", " "))
 
 # class AudioResultsBP(AudioWhisperBP):
@@ -443,7 +443,7 @@ class AudioConferenceBP(AudioWhisperBP, AudioResultsBP):
         def wrapped(dump=False):
             if dump:
                 return (db, rowid, fpath, answer)
-            reply = self.asr(fpath, answer)
+            reply = self.asr.recognize(fpath, answer)
             db.execute(
                 f"INSERT INTO {self.asr_table} (ref, data) VALUES (?, ?)",
                 (rowid, json.dumps(reply)))
