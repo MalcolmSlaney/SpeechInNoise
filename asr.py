@@ -19,7 +19,8 @@ class WhisperASR:
 
     def recognize(self, audio_path):
         res = self.model.transcribe(audio_path, word_timestamps=True,
-                                    language="en")
+                                    language="en",
+                                    fp16=False)
         return {**res, **self.meta}
 
 # can be overly generous
@@ -31,7 +32,8 @@ class PromptedWhisperASR:
     def recognize(self, audio_path, answer):
         res = self.model.transcribe(
                 audio_path, word_timestamps=True, initial_prompt=answer,
-                language="en")
+                language="en",
+                fp16=False)
         return {**res, **self.meta}
 
 
