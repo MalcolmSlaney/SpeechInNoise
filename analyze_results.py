@@ -476,6 +476,7 @@ def generate_html_report(all_results: List[QS_result],
                          all_ground_truth: Dict[Tuple[str, int, int], str],
                          only_discrepancies: bool = True,
                          filter_tests: List[str] = None,
+                         only_foreign: bool = True,
                          max_number: int = 10000000000) -> Tuple[str, int]:
   # Generate an HTML report of the inconsistencies
   html_output = """
@@ -533,7 +534,8 @@ def generate_html_report(all_results: List[QS_result],
 
     # Skip results where ASR recognized only ASCII characters (keep non ascii)
     # Should be a flag.
-    if all([isinstance(r, str) and r.isascii() for r in result.asr_words]):
+    if  only_foreign and all([isinstance(r, str) and r.isascii() 
+                              for r in result.asr_words]):
       continue
     html_output += "<tr>"
     html_output += f"<td>{result.user_name} {valid_subject_re.match(result.user_name)}</td>"
@@ -573,12 +575,14 @@ def generate_html_report(all_results: List[QS_result],
 FLAGS = flags.FLAGS
 
 # Define flags
-flags.DEFINE_string('dbfile', 'experiments.db', 
+flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 
                     'Sqllite3 database to read the experients results.')
 flags.DEFINE_string('homonyms', 'homonym_list.csv', 
                     'CSV file containing list of homonyms.')
 flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html', 
                     'Where to store the final discrepancy report.')
+flags.DEFINE_bool('only_foreign', True, 
+                  'Whether to only show foreign recognizer results in discrepancies html')
 # flags.DEFINE_boolean('debug', False, 'Enable debug mode.')
 
 def main(argv):
@@ -605,7 +609,8 @@ def main(argv):
       all_results, all_ground_truth,
       only_discrepancies=True,
       filter_tests=[],
-      max_number=1000)
+      only_foreign=FLAGS.only_foreign,
+      max_number=10000)
 
   with open(FLAGS.discrepancies, 'w') as f:
     f.write(html_report)
