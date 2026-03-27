@@ -7,19 +7,23 @@ from flask import g
 
 class Database:
     # creates database if it doesn't exist; set up by schema
-    def __init__(self, app, database, schema, init=[]):
+    def __init__(self, app, database, schema='', init=[]):
         self.database = os.path.abspath(database)
         self.init = init
         if not os.path.exists(database):
+          if schema:
             with app.app_context():
                 db = self.get()
                 with app.open_resource(schema, mode='r') as f:
                     db.cursor().executescript(f.read())
                 db.commit()
                 self.db_init_hook()
+          else:
+            raise ValueError('Can not create database without schema.')
 
         self.app = app
-        app.teardown_appcontext(lambda e: self.close())
+        if app:
+          app.teardown_appcontext(lambda e: self.close())
 
     # returns a database connection
     def get(self):
