@@ -149,6 +149,7 @@ def main(asr_engine: asr.WhisperASREngine,
     for rowid, fname, project in tqdm(audio_queue(con)):
         try:
             filename = os.path.join(basename, "uploads", fname)
+            print('Checking:', project, project in single_word_project_list)
             if project in single_word_project_list:
                 print(rowid, filename, project, 'Add English prompt')
                 new_filename = concatenate_audio_files(prompt_file, filename)

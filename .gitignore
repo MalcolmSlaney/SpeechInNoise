@@ -6,11 +6,14 @@ secret_key_google_text_to_speech
 /*.html
 /uploads
 /junk*
+/experiments*
+/*.wav
 
 # Python byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+*.DS_Store
 
 # Python environments
 .env
