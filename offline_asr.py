@@ -115,7 +115,7 @@ def adjust_timing(asr_result, prompt_time: float=1):
 
 def audio_queue(con: sqlite3.Connection):
     cur = con.execute(
-            "SELECT audio_results.id, reply_filename, project "
+            "SELECT audio_results.id, reply_filename, project, data "
             "FROM audio_results "
             "LEFT JOIN audio_trials ON audio_results.trial = audio_trials.id "
             "LEFT JOIN audio_asr ON audio_results.id=audio_asr.ref "
@@ -123,21 +123,39 @@ def audio_queue(con: sqlite3.Connection):
     q = cur.fetchall()
     cur.close()
     print(f'Need to perform ASR on {len(q)} trials.')
+    print('Samples rows are:', q[:20])
     return q
 
-def update(con: sqlite3.Connection, rowid: int, res: str):
+def XXupdate(con: sqlite3.Connection, rowid: int, res: str):
     res = json.dumps(res)
     cur = con.cursor()
+    print("INSERT INTO audio_asr (ref, data) VALUES (?, ?)", (rowid, res))
     cur.execute("INSERT INTO audio_asr (ref, data) VALUES (?, ?)", (rowid, res))
     con.commit()
     cur.close()
 
+def update(con: sqlite3.Connection, rowid: int, res: dict):
+    res_json = json.dumps(res)
+    cur = con.cursor()
+    
+    # First, let's make sure the index exists (idempotent)
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_asr_ref ON audio_asr (ref)")
+    
+    # Now this will actually REPLACE instead of just INSERTing
+    sql = "INSERT OR REPLACE INTO audio_asr (ref, data) VALUES (?, ?)"
+    
+    try:
+        cur.execute(sql, (rowid, res_json))
+        con.commit()
+    finally:
+        cur.close()
 
-def main(asr_engine: asr.WhisperASREngine,
+
+def XXmain(asr_engine: asr.WhisperASREngine,
          db_file: str, 
          single_word_projects: str = '',
          prompt_file: str = ''):
-    print('Offline_ASR started at', datetime.now())
+    print('Offline_ASR started at', datetime.now(), 'with', db_file)
     prompt_length = get_wav_duration_seconds(prompt_file)
     single_word_project_list = single_word_projects.split(',')
     if single_word_project_list:
@@ -146,10 +164,10 @@ def main(asr_engine: asr.WhisperASREngine,
        print(f' After {prompt_length}s.')
     con = sqlite3.connect(db_file)
     row_count = 0
-    for rowid, fname, project in tqdm(audio_queue(con)):
+    for rowid, fname, project, data in tqdm(audio_queue(con)):
         try:
             filename = os.path.join(basename, "uploads", fname)
-            print('Checking:', project, project in single_word_project_list)
+            print('Checking:', rowid, fname, project, project in single_word_project_list, data)
             if project in single_word_project_list:
                 print(rowid, filename, project, 'Add English prompt')
                 new_filename = concatenate_audio_files(prompt_file, filename)
@@ -167,6 +185,49 @@ def main(asr_engine: asr.WhisperASREngine,
         sys.stdout.flush()
     print(f'Finished processing {row_count} rows of speech data.')
 
+
+def main(asr_engine: asr.WhisperASREngine,
+         db_file: str, 
+         single_word_projects: str = ''):
+    
+    print(f'Offline_ASR started at {datetime.now()} with {db_file}')
+    single_word_project_list = single_word_projects.split(',')
+    
+    # Context prompt for single-word trials
+    # This helps Whisper realize it should expect short, English utterances
+    eng_prompt = "The following are short, clearly spoken English words."
+
+    with sqlite3.connect(db_file) as con:
+        row_count = 0
+        for rowid, fname, project, data in tqdm(audio_queue(con)):
+            filename = os.path.join(basename, "uploads", fname)
+            print('Next job:', rowid, filename, project, 'Add English prompt')
+            
+            try:
+                # If it's a single-word project, we pass the text prompt instead of merging audio
+                if project in single_word_project_list:
+                    # We specify language='en' to force the decoder
+                    # and initial_prompt to provide context
+                    asr_result = asr_engine.recognize(
+                        filename, 
+                        # language="en", 
+                        initial_prompt=eng_prompt
+                    )
+                else:
+                    asr_result = asr_engine.recognize(filename)
+                print('Final ASR result is:')
+                pprint.pprint(asr_result)
+
+                update(con, rowid, asr_result)
+                row_count += 1
+
+            except Exception as e:
+                print(f"\n[!] Error on row {rowid}: {e}")
+                continue
+
+    print(f'Finished processing {row_count} rows.')
+
+    
 def deduplicate(db_file: str, **kw):
     con = sqlite3.connect(db_file)
     dup, sep = "json_extract(data, '$.' || ?) = ?", " AND "
@@ -219,6 +280,6 @@ if __name__ == "__main__":
     
     main(getattr(asr, args.asr)(args.model), args.dbfile,
          args.single_word_projects, 
-         args.language_prompt_file,
+         # args.language_prompt_file,
          )
 
