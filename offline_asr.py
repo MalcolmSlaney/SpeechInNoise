@@ -247,7 +247,7 @@ if __name__ == "__main__":
             "small.en", "small",
             "medium.en", "medium",
             "large"]
-    parser.add_argument("--model", default="large", choices=models, help=(
+    parser.add_argument("--model", default="medium.en", choices=models, help=(
             "which whisper model size to use (default: large); see: "
             "https://github.com/openai/whisper#available-models-and-languages"))
     parser.add_argument("--dbfile", 

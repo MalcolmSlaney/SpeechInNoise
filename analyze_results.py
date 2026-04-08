@@ -10,7 +10,8 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
+import sys
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import sqlite3
 
@@ -61,7 +62,7 @@ def fix_random_user_names(text_tag: str) -> str:
 ################### Global Homonyms ################################
 
 def read_homonyms(filename: str = 'homonym_list.csv', 
-                  starting_dict={}) -> Dict[str, set]:
+                  starting_dict: Dict[str, Set[str]]={}) -> Dict[str, Set[str]]:
   """Read a list of homonyms from a CSV file. 
   
   Start with an initial homonym list and rationalize it first by making sure
@@ -129,11 +130,15 @@ def split_words(original_list: list[str],
       result.append(w)
   return result
 
-def process_all_ground_truth(db_file: str,
-                             homonym_list: Dict[str, set[str]]) -> Dict[Tuple[str, int, int], list[set]]:
-  # Create a list of ground truths, indexed. by the test name, list number, and 
-  # then sentence number.
-  # https://github.com/MalcolmSlaney/SpeechInNoise/blob/81c92d3e8a7e7db6d5f62f511d4bebe8ef7f883c/schema.sql#L57
+def process_all_ground_truth(
+    db_file: str, 
+    homonym_list: Dict[str, Set[str]]) -> Dict[Tuple[str, int, int], 
+                                               List[Set[str]]]:
+  """
+  Create a ground truth dictionary, indexed. by the test name, list number,
+  and then sentence number. The ground truth for each sentence is a list of 
+  sets of keywords.
+  """
   test_transcripts = get_all_test_transcripts(db_file)
   print(f'Read ground truth for {len(test_transcripts)} tests.')
 
@@ -414,7 +419,7 @@ def all_test_confusions(all_results: List[QS_result]) -> Dict[str, NDArray]:
   Each confusion matrix is indexed by
     human, asr
   """
-  valid_subject_re = re.compile('A\d+[SP]\d+')
+  valid_subject_re = re.compile('A\\d+[SP]\\d+')
   all_confusions = {}
   for r in all_results:
     if valid_subject_re.match(r.user_name):
@@ -521,7 +526,7 @@ def generate_html_report(all_results: List[QS_result],
     </tr>
   """
 
-  valid_subject_re = re.compile('A\d+[PS]\d+')
+  valid_subject_re = re.compile('A\\d+[PS]\\d+')
   row_count = 0
   for result in all_results[:max_number]:
     if not valid_subject_re.match(result.user_name):
@@ -583,18 +588,19 @@ flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html',
                     'Where to store the final discrepancy report.')
 flags.DEFINE_bool('only_foreign', True, 
                   'Whether to only show foreign recognizer results in discrepancies html')
+flags.DEFINE_bool('only_discrepancies', True, 
+                  'Whether to only show human/machine discrepancies the final html')
 # flags.DEFINE_boolean('debug', False, 'Enable debug mode.')
 
 def main(argv):
   """Main entry point."""
   assert os.path.exists(FLAGS.dbfile), f'Database file {FLAGS.dbfile} does not exist.'
   # Prepare the homonym list and then the ground truth.
-  homonym_list = read_homonyms(FLAGS.homonyms, 
-                               # qsb.make_homonyms_dictionary(qsb.homonyms)
-                               )
+  homonym_list = read_homonyms(FLAGS.homonyms)  # Dict[str, Set[str]]
   all_ground_truth = process_all_ground_truth(FLAGS.dbfile, homonym_list)
 
-  # Read and normalize the user and asr results from the database.
+  # Read and normalize the user and asr results from the database. Create
+  # a list of QS_result objects, and save to a CSV file for later analysis.
   all_query_results = get_all_sql_data(FLAGS.dbfile)
   all_results = convert_sql_to_results(all_query_results,
                                        all_ground_truth)
@@ -607,7 +613,7 @@ def main(argv):
 
   html_report, row_count = generate_html_report(
       all_results, all_ground_truth,
-      only_discrepancies=True,
+      only_discrepancies=FLAGS.only_discrepancies,
       filter_tests=[],
       only_foreign=FLAGS.only_foreign,
       max_number=10000)

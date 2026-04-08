@@ -18,8 +18,12 @@ from absl import flags
 
 # Define command-line flags
 FLAGS = flags.FLAGS
-flags.DEFINE_boolean('dry_run', True, 'If True, prints rows that would be updated. If False, performs the actual update.')
-flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 'Path to the SQLite database file.')
+flags.DEFINE_boolean('dry_run', True, 
+                     'If True, prints rows that would be updated. If False, performs the actual update.')
+flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 
+                    'Path to the SQLite database file.')
+flags.DEFINE_string('word', '%', 
+                    'The word to target for clearing ASR data. Use % for all words, or specify a single word.')
 
 def main(argv):
     del argv  # Unused, but required by absl.app
@@ -51,6 +55,7 @@ def main(argv):
                 JOIN audio_results ar ON aa.ref = ar.id
                 JOIN audio_trials at ON ar.trial = at.id
                 WHERE at.project IN ({placeholders})
+                  AND LOWER(at.answer) = '{FLAGS.word.lower()}'
                   AND IFNULL(aa.data, ' ') != '';
             """
             cursor.execute(select_query, target_projects)
