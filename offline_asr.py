@@ -11,21 +11,32 @@ import sys
 import tempfile
 from tqdm import tqdm
 from typing import List
+from multiprocessing import Pool
+from functools import partial
 
 import asr
 
 default_sample_rate = 22050
 basename = pathlib.Path(__file__).parents[0]
 
+# --- Global variable to hold the worker's specific model ---
+worker_asr_engine = None
+
+def init_worker(asr_class_name: str, model_name: str):
+    """
+    Initializes the PyTorch model INSIDE the worker process.
+    This prevents PyTorch from trying to share file descriptors across processes.
+    """
+    global worker_asr_engine
+    import asr
+    
+    # Instantiate the model
+    asr_class = getattr(asr, asr_class_name)
+    worker_asr_engine = asr_class(model_name)
+
 def get_wav_duration_seconds(file_path: str) -> float:
   """
   Reads a WAV file and returns its length in seconds.
-
-  Args:
-    file_path: Path to the WAV audio file.
-
-  Returns:
-    The duration of the audio file in seconds as a float.
   """
   try:
     samplerate, data = scipy.io.wavfile.read(file_path)
@@ -43,34 +54,20 @@ def concatenate_audio_files(input_file1: str, input_file2: str) -> str:
   """
   Concatenates two audio files using ffmpeg, saves the result to a temporary WAV file,
   and returns the filename of the temporary output.
-
-  Args:
-    input_file1: Path to the first input audio file.
-    input_file2: Path to the second input audio file.
-
-  Returns:
-    The filename of the temporary concatenated audio file.
   """
   temp_output_filename = tempfile.mktemp(suffix='.wav')
-
-  # ffmpeg -i audio1.wav -i audio2.wav -filter_complex "[0:a]aresample=resampler=shorter:osr=[TARGET_SAMPLE_RATE][a0];[1:a]aresample=resampler=shorter:osr=[TARGET_SAMPLE_RATE][a1];[a0][a1]concat=n=2:v=0:a=1[out]" -map "[out]" -c:a aac output.m4a
-
 
   cmd = ('ffmpeg -i {} -i {} -filter_complex '
          '"[0:a]aresample={}[a0];[1:a]aresample={}[a1];'
          '[a0][a1]concat=n=2:v=0:a=1[out]" -map "[out]" {}')
   formatted_cmd = cmd.format(input_file1, input_file2, 22050, 22050, temp_output_filename)
 
-  # print(f"Running command: {formatted_cmd}")
   process = subprocess.run(formatted_cmd, shell=True, capture_output=True, text=True)
 
   if process.returncode != 0:
     print("Error during ffmpeg execution:")
     print(process.stderr)
     raise RuntimeError("ffmpeg command failed")
-  # else:
-  #   print("ffmpeg output:")
-  #   print(process.stdout)
 
   return temp_output_filename
 
@@ -82,7 +79,6 @@ def assemble_words(asr_result: dict):
 def filter_words(words: List[dict], prompt_time: float):
   results = []
   for word in words:
-    # print(f'Checking {word["word"]} ending at {word["end"]}')
     if word['start'] < prompt_time:
       continue
     word['start'] -= prompt_time
@@ -91,7 +87,6 @@ def filter_words(words: List[dict], prompt_time: float):
   return results
 
 def filter_segment(segment: dict, prompt_time: float):
-  # print(f'Checking segment ending at {segment["end"]}')
   if segment['end'] < prompt_time:
     return None
   else:
@@ -126,22 +121,13 @@ def audio_queue(con: sqlite3.Connection):
     print('Samples rows are:', q[:20])
     return q
 
-def XXupdate(con: sqlite3.Connection, rowid: int, res: str):
-    res = json.dumps(res)
-    cur = con.cursor()
-    print("INSERT INTO audio_asr (ref, data) VALUES (?, ?)", (rowid, res))
-    cur.execute("INSERT INTO audio_asr (ref, data) VALUES (?, ?)", (rowid, res))
-    con.commit()
-    cur.close()
 
 def update(con: sqlite3.Connection, rowid: int, res: dict):
     res_json = json.dumps(res)
     cur = con.cursor()
     
-    # First, let's make sure the index exists (idempotent)
     cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_asr_ref ON audio_asr (ref)")
     
-    # Now this will actually REPLACE instead of just INSERTing
     sql = "INSERT OR REPLACE INTO audio_asr (ref, data) VALUES (?, ?)"
     
     try:
@@ -151,79 +137,88 @@ def update(con: sqlite3.Connection, rowid: int, res: dict):
         cur.close()
 
 
-def XXmain(asr_engine: asr.WhisperASREngine,
+def process_audio_task(task, project_list, eng_prompt):
+    """
+    Executes the expensive ASR task using the process-local model.
+    """
+    global worker_asr_engine
+    
+    rowid, fname, project, data = task
+    filename = os.path.join(basename, "uploads", fname)
+    
+    try:
+        if project in project_list:
+            asr_result = worker_asr_engine.recognize(
+                filename, 
+                initial_prompt=eng_prompt
+            )
+        else:
+            asr_result = worker_asr_engine.recognize(filename)
+        
+        return rowid, asr_result, None
+    except Exception as e:
+        return rowid, None, str(e)
+
+
+def main(asr_class_name: str, 
+         model_name: str,
          db_file: str, 
          single_word_projects: str = '',
-         prompt_file: str = ''):
-    print('Offline_ASR started at', datetime.now(), 'with', db_file)
-    prompt_length = get_wav_duration_seconds(prompt_file)
-    single_word_project_list = single_word_projects.split(',')
-    if single_word_project_list:
-       print('Looking for single words in these test:', 
-             single_word_project_list)
-       print(f' After {prompt_length}s.')
-    con = sqlite3.connect(db_file)
-    row_count = 0
-    for rowid, fname, project, data in tqdm(audio_queue(con)):
-        try:
-            filename = os.path.join(basename, "uploads", fname)
-            print('Checking:', rowid, fname, project, project in single_word_project_list, data)
-            if project in single_word_project_list:
-                print(rowid, filename, project, 'Add English prompt')
-                new_filename = concatenate_audio_files(prompt_file, filename)
-                asr_result = asr_engine.recognize(new_filename)
-                asr_result = adjust_timing(asr_result, prompt_length)
-                # pprint.pprint(asr_result)
-            else:
-              asr_result = asr_engine.recognize(filename)
-            update(con, rowid, asr_result)
-            row_count += 1
-        except RuntimeError as e:
-            # Code to handle the exception
-            print(f"An error occurred: {e}")
-            print('While processing', filename)
-        sys.stdout.flush()
-    print(f'Finished processing {row_count} rows of speech data.')
-
-
-def main(asr_engine: asr.WhisperASREngine,
-         db_file: str, 
-         single_word_projects: str = ''):
+         num_workers: int = 1):
     
     print(f'Offline_ASR started at {datetime.now()} with {db_file}')
-    single_word_project_list = single_word_projects.split(',')
+    single_word_project_list = single_word_projects.split(',') if single_word_projects else []
     
-    # Context prompt for single-word trials
-    # This helps Whisper realize it should expect short, English utterances
     eng_prompt = "The following are short, clearly spoken English words."
 
+    # Fetch all pending tasks in the main process
     with sqlite3.connect(db_file) as con:
-        row_count = 0
-        for rowid, fname, project, data in tqdm(audio_queue(con)):
-            filename = os.path.join(basename, "uploads", fname)
-            print('Next job:', rowid, filename, project, 'Add English prompt')
-            
-            try:
-                # If it's a single-word project, we pass the text prompt instead of merging audio
-                if project in single_word_project_list:
-                    # We specify language='en' to force the decoder
-                    # and initial_prompt to provide context
-                    asr_result = asr_engine.recognize(
-                        filename, 
-                        # language="en", 
-                        initial_prompt=eng_prompt
-                    )
-                else:
-                    asr_result = asr_engine.recognize(filename)
-                print('Final ASR result is:')
-                pprint.pprint(asr_result)
+        tasks = audio_queue(con)
 
-                update(con, rowid, asr_result)
-                row_count += 1
+    if not tasks:
+        print("No tasks found.")
+        return
 
-            except Exception as e:
-                print(f"\n[!] Error on row {rowid}: {e}")
-                continue
+    print(f"Processing {len(tasks)} tasks using {num_workers} worker(s)...")
+
+    # Bind the static arguments to our worker function
+    worker_func = partial(
+        process_audio_task,
+        project_list=single_word_project_list,
+        eng_prompt=eng_prompt
+    )
+
+    row_count = 0
+
+    # Re-open the DB connection in the main thread for writing results
+    with sqlite3.connect(db_file) as con:
+        if num_workers <= 1:
+            # For a single worker, manually initialize the global engine in the main thread
+            init_worker(asr_class_name, model_name)
+            for task in tqdm(tasks):
+                rowid, asr_result, error = worker_func(task)
+                if error:
+                    print(f"\n[!] Error on row {rowid}: {error}")
+                    continue
+                if asr_result:
+                    update(con, rowid, asr_result)
+                    row_count += 1
+                sys.stddout.flush()  # Ensure progress bar updates correctly
+        else:
+            # For multiprocessing, tell the pool to run init_worker on boot
+            with Pool(
+                processes=num_workers, 
+                initializer=init_worker, 
+                initargs=(asr_class_name, model_name)
+            ) as pool:
+                for rowid, asr_result, error in tqdm(pool.imap_unordered(worker_func, tasks), total=len(tasks)):
+                    if error:
+                        print(f"\n[!] Error on row {rowid}: {error}")
+                        continue
+                    if asr_result:
+                        update(con, rowid, asr_result)
+                        row_count += 1
+                    sys.stddout.flush()  # Ensure progress bar updates correctly
 
     print(f'Finished processing {row_count} rows.')
 
@@ -264,10 +259,12 @@ if __name__ == "__main__":
             action="store_const", const="PromptedWhisperASR", help=(
                 "use the correct answer as the model prompt; can help accuracy "
                 "but can also bias results towards correct"))
-    # parser.add_argument(
-    #         "--test", action="", help="Run a test on a single audio file"
-    # )
     parser.add_argument("--force", action="store_true")
+    
+    parser.add_argument("--num_workers", type=int, default=1,
+                        help="Number of concurrent workers for ASR processing. "
+                             "Warning: Running multiple workers will multiply your RAM/VRAM usage.")
+    
     args = parser.parse_args()
 
     assert os.path.exists(args.dbfile)
@@ -277,9 +274,9 @@ if __name__ == "__main__":
         model_type = "default" if args.asr == "WhisperASR" else "prompted"
         deduplicate(args.dbfile, model_name=args.model, model_type=model_type)
     
-    
-    main(getattr(asr, args.asr)(args.model), args.dbfile,
+    # Notice we pass the string names here now
+    main(args.asr, 
+         args.model, 
+         args.dbfile,
          args.single_word_projects, 
-         # args.language_prompt_file,
-         )
-
+         args.num_workers)

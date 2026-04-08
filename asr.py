@@ -17,7 +17,8 @@ class WhisperASR:
         self.model = whisper.load_model(model_name)
         self.meta = {"model_name": model_name, "model_type": "default"}
 
-    def recognize(self, audio_path, language='en'):
+    def recognize(self, audio_path, language='en', initial_prompt=''):
+        del initial_prompt  # Ignored in the default model, but included in the interface for compatibility with PromptedWhisperASR
         res = self.model.transcribe(audio_path, word_timestamps=True,
                                     language=language,
                                     fp16=False)
