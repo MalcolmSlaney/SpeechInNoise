@@ -4,6 +4,7 @@
 from absl import app, flags
 import csv
 from dataclasses import dataclass
+from datetime import datetime # Make sure this is at the top of your file
 import json
 import matplotlib.pyplot as plt
 import numpy as np
@@ -260,7 +261,7 @@ def asr_match(desired_word_set: Union[set[str], str],
       parts[1] = set([parts[1], '-' + parts[1]])
       results = [asr_match(w, recognized_words) for w in parts]
       has_all_parts = all(r[0] for r in results)
-      return has_all_parts, results[0][0]  # Return first recognized time
+      return has_all_parts, results[0][1]  # Return first recognized time
     for reco in recognized_words:
         asr_word = normalize_word(reco['word'])
         desired_word = normalize_word(desired_word)
@@ -477,12 +478,27 @@ def fix_encoding(bad_string: str) -> str:
   return html_encoded
 
 ######################## Generate HTML Summary Page #########################
+from datetime import datetime # Make sure this is at the top of your file
+import os
+
 def generate_html_report(all_results: List[QS_result],
                          all_ground_truth: Dict[Tuple[str, int, int], str],
+                         db_file: str,  # <--- Added db_file parameter
                          only_discrepancies: bool = True,
                          filter_tests: List[str] = None,
                          only_foreign: bool = True,
                          max_number: int = 10000000000) -> Tuple[str, int]:
+  
+  # --- Calculate Timestamps ---
+  # Current time the routine is called
+  current_time = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
+  
+  # Last modification time of the SQLite database
+  db_mod_time = "Unknown"
+  if os.path.exists(db_file):
+      mtime = os.path.getmtime(db_file)
+      db_mod_time = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %I:%M:%S %p")
+  
   # Generate an HTML report of the inconsistencies
   html_output = """
   <!DOCTYPE html>
@@ -510,7 +526,15 @@ def generate_html_report(all_results: List[QS_result],
   <body>
 
   <h1>QuickSIN ASR vs Audiologist Discrepancies</h1>
+  """
 
+  # --- Inject the Timestamps into the HTML ---
+  html_output += f"""
+  <p><strong>Report Generated:</strong> {current_time}</p>
+  <p><strong>Database Last Modified:</strong> {db_mod_time} <em>({os.path.basename(db_file)})</em></p>
+  """
+
+  html_output += """
   <table>
     <tr>
       <th>Subject</th>
@@ -538,15 +562,17 @@ def generate_html_report(all_results: List[QS_result],
       continue
 
     # Skip results where ASR recognized only ASCII characters (keep non ascii)
-    # Should be a flag.
     if  only_foreign and all([isinstance(r, str) and r.isascii() 
                               for r in result.asr_words]):
       continue
+      
     html_output += "<tr>"
-    html_output += f"<td>{result.user_name} {valid_subject_re.match(result.user_name)}</td>"
+    # Note: Removed the regex Match object leak from the previous code review
+    html_output += f"<td>{result.user_name}</td>"
     html_output += f"<td>{result.trials_project}</td>"
     html_output += f"<td>{result.trials_trial_number}</td>"
     html_output += f"<td>{result.trials_level_number}</td>"
+    
     # Display ground truth from all_ground_truth dictionary
     ground_truth = all_ground_truth.get((result.trials_project, 
                                          result.trials_trial_number, 
@@ -556,12 +582,12 @@ def generate_html_report(all_results: List[QS_result],
     html_output += f"<td>{', '.join([fix_encoding(r) for r in result.asr_words]) if result.asr_words else 'N/A'}</td>"
     html_output += f"<td>{result.annotation_matches}</td>"
     html_output += f"<td>{result.asr_matches}</td>"
-    # https://www.w3schools.com/charsets/ref_utf_dingbats.asp
+    
     if all(result.audiology_asr_matches):
       html_output += "<td>&#9989;</td>" # a check mark
     else:
       html_output += "<td>&#10008;</td>" # heavy ballot x
-    # html_output += f"<td>{result.audiology_asr_matches}</td>"
+      
     audio_url = f"https://quicksin.stanford.edu/uploads/{result.results_reply_filename}.wav"
     html_output += f'<td><audio controls> <source src={audio_url} type=audio/mp4>Your browser does not support the audio element.</audio></td>'
     html_output += "</tr>\n"
@@ -577,6 +603,7 @@ def generate_html_report(all_results: List[QS_result],
   """
   return html_output, row_count
 
+
 FLAGS = flags.FLAGS
 
 # Define flags
@@ -586,7 +613,7 @@ flags.DEFINE_string('homonyms', 'homonym_list.csv',
                     'CSV file containing list of homonyms.')
 flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html', 
                     'Where to store the final discrepancy report.')
-flags.DEFINE_bool('only_foreign', True, 
+flags.DEFINE_bool('only_foreign', False, 
                   'Whether to only show foreign recognizer results in discrepancies html')
 flags.DEFINE_bool('only_discrepancies', True, 
                   'Whether to only show human/machine discrepancies the final html')
@@ -613,6 +640,7 @@ def main(argv):
 
   html_report, row_count = generate_html_report(
       all_results, all_ground_truth,
+      db_file=FLAGS.dbfile,  
       only_discrepancies=FLAGS.only_discrepancies,
       filter_tests=[],
       only_foreign=FLAGS.only_foreign,
