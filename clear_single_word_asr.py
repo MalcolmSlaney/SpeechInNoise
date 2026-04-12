@@ -16,6 +16,46 @@ import sys
 from absl import app
 from absl import flags
 
+def print_asr_data_counts(cursor: sqlite3.Cursor):
+    """
+    Queries the database to count the number of empty and non-empty 'data' 
+    fields in the audio_asr table, grouped and sorted by project name.
+    """
+    query = """
+        SELECT 
+            at.project,
+            SUM(CASE WHEN IFNULL(aa.data, '') = '' THEN 1 ELSE 0 END) as empty_count,
+            SUM(CASE WHEN IFNULL(aa.data, '') != '' THEN 1 ELSE 0 END) as non_empty_count
+        FROM audio_asr aa
+        JOIN audio_results ar ON aa.ref = ar.id
+        JOIN audio_trials at ON ar.trial = at.id
+        GROUP BY at.project
+        ORDER BY at.project;
+    """
+    
+    try:
+        cursor.execute(query)
+        results = cursor.fetchall()
+        
+        print("\n=== ASR Data Completeness by Project ===")
+        print(f"{'Project':<15} | {'Empty (Needs ASR)':<18} | {'Non-Empty (Completed)'}")
+        print("-" * 58)
+        
+        if not results:
+            print("No data found to aggregate.")
+            return
+            
+        for project, empty_count, non_empty_count in results:
+            # project might be None if the database has orphaned records, fallback to 'UNKNOWN'
+            safe_project = project if project else "UNKNOWN"
+            print(f"{safe_project:<15} | {empty_count:<18} | {non_empty_count}")
+            
+        print("-" * 58)
+        
+    except sqlite3.Error as e:
+        print(f"Error executing count query: {e}")
+
+
 # Define command-line flags
 FLAGS = flags.FLAGS
 flags.DEFINE_boolean('dry_run', True, 
@@ -36,6 +76,8 @@ def main(argv):
     except sqlite3.Error as e:
         print(f"Failed to connect to database: {e}")
         sys.exit(1)
+
+    print_asr_data_counts(cursor)  # Show the current state of ASR data before any changes
 
     try:
         # Define the target projects
