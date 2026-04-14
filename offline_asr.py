@@ -1,3 +1,8 @@
+"""
+Run ASR on all the subject audio that has not already been processed.
+Store the results in the audio_asr table as Whisper's JSON.
+The only output from this program is an update datbase file.
+"""
 import copy
 from datetime import datetime
 import json
