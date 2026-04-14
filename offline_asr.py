@@ -172,9 +172,11 @@ def get_audio_queue(con: sqlite3.Connection):
       "SELECT audio_results.id, reply_filename, project, data, users.username "
       "FROM audio_results "
       "LEFT JOIN audio_trials ON audio_results.trial = audio_trials.id "
-      "LEFT JOIN audio_asr ON audio_results.id=audio_asr.ref "
+      "LEFT JOIN audio_asr ON audio_results.id = audio_asr.ref "
       "LEFT JOIN users ON audio_results.subject = users.id "
-      "WHERE audio_asr.data IS NULL OR audio_asr.data = ''")
+      "WHERE audio_asr.ref IS NULL "    # This catches rows that DON'T EXIST in audio_asr
+      "   OR audio_asr.data IS NULL "   # This catches rows that exist but are NULL
+      "   OR audio_asr.data = ''")      # This catches rows that exist but are empty
     q = cur.fetchall()
     cur.close()
     print(f'Need to perform ASR on {len(q)} trials.')
@@ -199,7 +201,8 @@ def update(con: sqlite3.Connection, rowid: int, res: dict):
 
 def recognize_with_prompt(audio_path: str, 
                           prompt_path: str,
-                          prompt_length: float) -> Dict[str, Any]:
+                          prompt_length: float,
+                          adjust_timing: bool = True) -> Dict[str, Any]:
     """Concatenates the prompt audio with the target audio, runs ASR on the 
     combined file, and then filters the results to only include words that 
     occur after the prompt."""
@@ -207,8 +210,11 @@ def recognize_with_prompt(audio_path: str,
     combined_result = {}
     try:
         asr_result = worker_asr_engine.recognize(combined_path)
-        adjusted_result = adjust_timing(
-           asr_result, prompt_length=prompt_length)
+        if adjust_timing:
+          adjusted_result = adjust_timing(
+            asr_result, prompt_length=prompt_length)
+        else:
+          adjusted_result = asr_result
     finally:
         os.remove(combined_path)
     return adjusted_result
@@ -229,11 +235,18 @@ def process_audio_task(task: Tuple,
     try:
         if project in project_list and username in audio_prompt_dict:
           prompt_filename, prompt_audio_length = audio_prompt_dict[username]
+          print('\n**********************************************')
           print('Adding prompt for user', username, 'in project', project, 
                 'of length', prompt_audio_length, 'seconds')
           asr_result = recognize_with_prompt(test_filename, 
                                              prompt_filename, 
-                                             prompt_audio_length)
+                                             prompt_audio_length, 
+                                             adjust_timing=False)
+          asr_result2 = worker_asr_engine.recognize(test_filename)
+          print('ASR result with prompt:', asr_result['text'])
+          print('')
+          print('ASR result without prompt:', asr_result2['text'])
+          sys.stdout.flush()
         else:
           asr_result = worker_asr_engine.recognize(test_filename)
         

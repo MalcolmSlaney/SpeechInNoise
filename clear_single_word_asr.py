@@ -97,7 +97,7 @@ def main(argv):
                 JOIN audio_results ar ON aa.ref = ar.id
                 JOIN audio_trials at ON ar.trial = at.id
                 WHERE at.project IN ({placeholders})
-                  AND LOWER(at.answer) = '{FLAGS.word.lower()}'
+                  AND LOWER(at.answer) LIKE '{FLAGS.word.lower()}'
                   AND IFNULL(aa.data, ' ') != '';
             """
             cursor.execute(select_query, target_projects)
@@ -129,6 +129,7 @@ def main(argv):
                     FROM audio_results ar
                     JOIN audio_trials at ON ar.trial = at.id
                     WHERE at.project IN ({placeholders})
+                      AND LOWER(at.answer) LIKE '{FLAGS.word.lower()}'
                 )
                 AND IFNULL(data, ' ') != '';
             """

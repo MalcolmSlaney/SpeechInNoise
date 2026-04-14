@@ -90,6 +90,7 @@ def process_all_files(directory: str = '.', pattern='sin*',
     if file.endswith(output_suffix):
       # Already processed.  Skip now.
       continue
+    # Should check to see if output file is already there and then skip...
     if any([file.endswith(s) for s in skip_suffixes]):
       continue
     rate, audio_data = read_mp4(file)
