@@ -1,4 +1,4 @@
-import os, sqlite3
+import os
 from storage import relpath
 
 def ensure_consent_form_column(review_conn):
@@ -21,7 +21,8 @@ def ensure_consent_form_column(review_conn):
               total_reviews INTEGER DEFAULT 0,
               played_audio TEXT,
               notes TEXT,
-              consent_form BLOB NOT NULL
+              consent_form BLOB NOT NULL,
+              test_type TEXT NOT NULL DEFAULT 'patient' CHECK(test_type IN('prepilot', 'pilot', 'patient', 'in_clinic_audiologist'))
             )
         """)
         review_conn.commit()
@@ -29,6 +30,11 @@ def ensure_consent_form_column(review_conn):
         columns = [row[1] for row in review_conn.execute("PRAGMA table_info(reviewers)").fetchall()]
         if 'consent_form' not in columns:
             review_conn.execute("ALTER TABLE reviewers ADD COLUMN consent_form BLOB")
+            review_conn.commit()
+        if 'test_type' not in columns:
+            review_conn.execute(
+                "ALTER TABLE reviewers ADD COLUMN test_type TEXT NOT NULL DEFAULT 'patient' "
+                "CHECK(test_type IN('prepilot', 'pilot', 'patient', 'in_clinic_audiologist'))")
             review_conn.commit()
 
 def validate_consent_form_file(consent_form_file):
@@ -47,10 +53,10 @@ def validate_consent_form_file(consent_form_file):
     
     return consent_form_data, None
 
-def save_consent_form_to_database(review_conn, username, role, years_practicing, consent_form_data):
+def save_consent_form_to_database(review_conn, username, role, years_practicing, consent_form_data, test_type='patient'):
     review_conn.execute(
-        "INSERT INTO reviewers (username, role, years_practicing, consent_form) VALUES (?, ?, ?, ?)",
-        (username, role, years_practicing, consent_form_data))
+        "INSERT INTO reviewers (username, role, years_practicing, consent_form, test_type) VALUES (?, ?, ?, ?, ?)",
+        (username, role, years_practicing, consent_form_data, test_type))
     review_conn.commit()
 
 def save_consent_form_to_filesystem(username, consent_form_data):
@@ -65,13 +71,13 @@ def save_consent_form_to_filesystem(username, consent_form_data):
     except Exception as e:
         return None, str(e)
 
-def process_consent_form_upload(review_conn, username, role, years_practicing, consent_form_file):
+def process_consent_form_upload(review_conn, username, role, years_practicing, consent_form_file, test_type='patient'):
     consent_form_data, validation_error = validate_consent_form_file(consent_form_file)
     if validation_error:
         return False, validation_error, None
     
     try:
-        save_consent_form_to_database(review_conn, username, role, years_practicing, consent_form_data)
+        save_consent_form_to_database(review_conn, username, role, years_practicing, consent_form_data, test_type)
     except Exception as e:
         return False, f"Failed to save consent form: {e}", None
     
@@ -80,4 +86,3 @@ def process_consent_form_upload(review_conn, username, role, years_practicing, c
         return True, None, None
     
     return True, None, file_path
-

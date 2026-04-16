@@ -1,7 +1,16 @@
 import json
+import os
 import random
 from flask import session
 from review_modules import state, queries
+
+
+def _reviewer_in_clinic(db, username):
+    try:
+        r = db.queryone("SELECT test_type FROM reviewers WHERE username = ?", (username,))
+        return bool(r and r[0] == "in_clinic_audiologist")
+    except Exception:
+        return False
 
 
 def get_current_file_data(db, user_id, username=None):
@@ -48,6 +57,37 @@ def get_current_file_data(db, user_id, username=None):
             return files[0], subject_id, project, 0, total_files, absolute_file_num
     
     remaining_tests = state.get_remaining_tests(db, username, user_id)
+    if os.environ.get("CAP_COMPLETED_PATIENT_PROJECTS", "0").lower() in ("1", "true", "yes", "on") and not _reviewer_in_clinic(db, username):
+        remaining_tests = [
+            t for t in remaining_tests
+            if db.queryone(
+                """
+                SELECT COUNT(*)
+                FROM (
+                    SELECT ra.labeler
+                    FROM review_annotations ra
+                    JOIN audio_results ar ON ra.ref = ar.id
+                    JOIN audio_trials at ON ar.trial = at.id
+                    JOIN user_info ui_labeler
+                        ON ui_labeler.user = ra.labeler
+                        AND ui_labeler.info_key = 'test-type'
+                        AND ui_labeler.value = 'patient'
+                    WHERE ar.subject = ? AND at.project = ?
+                    GROUP BY ra.labeler
+                    HAVING COUNT(DISTINCT ra.ref) >= (
+                        SELECT COUNT(*)
+                        FROM audio_results ar2
+                        JOIN audio_trials at2 ON ar2.trial = at2.id
+                        WHERE ar2.subject = ?
+                          AND at2.project = ?
+                          AND ar2.reply_filename IS NOT NULL
+                          AND ar2.reply_filename != ''
+                    )
+                ) x
+                """,
+                (t["subject"], t["project"], t["subject"], t["project"])
+            )[0] < 5
+        ]
     
     if not remaining_tests:
         return None, None, None, None, None, None

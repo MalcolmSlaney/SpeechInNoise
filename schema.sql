@@ -120,7 +120,8 @@ CREATE TABLE reviewers (
   total_reviews INTEGER DEFAULT 0, /* Total number of reviews completed by this reviewer */
   played_audio TEXT, /* JSON array of audio_results.id that have been played but not yet reviewed: [42, 43, 44] */
   notes TEXT, /* Additional notes or comments about the reviewer, empty currently */
-  consent_form BLOB NOT NULL /* Consent form signed by reviewer */
+  consent_form BLOB NOT NULL, /* Consent form signed by reviewer */
+  test_type TEXT NOT NULL DEFAULT 'patient' CHECK(test_type IN('prepilot', 'pilot', 'patient', 'in_clinic_audiologist'))
 );
 
 CREATE TABLE review_annotations (

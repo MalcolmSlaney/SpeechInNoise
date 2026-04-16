@@ -1,7 +1,8 @@
 import os
 
-def get_available_tests(db, user_id):
-    return db.queryall("""
+def get_available_tests(db, user_id, in_clinic=False):
+    project_clause = "AND at.project IN ('quick', 'win')" if in_clinic else ""
+    return db.queryall(f"""
         SELECT ar.subject, at.project, COUNT(DISTINCT CASE WHEN ui_labeler.info_key = 'test-type' AND ui_labeler.value = 'patient' THEN ra.ref ELSE NULL END) as total_reviews
         FROM audio_results ar
         LEFT JOIN audio_trials at ON ar.trial = at.id
@@ -11,6 +12,7 @@ def get_available_tests(db, user_id):
         LEFT JOIN users u_labeler ON ra.labeler = u_labeler.id
         LEFT JOIN user_info ui_labeler ON u_labeler.id = ui_labeler.user AND ui_labeler.info_key = 'test-type'
         WHERE ui.info_key = 'test-type' AND ui.value = 'patient'
+        {project_clause}
         AND ar.id NOT IN (SELECT ref FROM review_annotations WHERE labeler = ?)
         AND EXISTS (SELECT 1 FROM audio_results ar2 
                     LEFT JOIN audio_trials at2 ON ar2.trial = at2.id

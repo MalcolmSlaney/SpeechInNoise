@@ -3,6 +3,7 @@ from storage import DatabaseBP, relpath, Database
 from flask import Blueprint, session, request, send_from_directory, abort, Response
 from audio import upload_location
 from review_modules.helpers import extract_username, save_review_annotation
+from review_modules.consent_upload import ensure_consent_form_column
 from review_modules import state, queries, file_selection, responses
 
 # Database configuration - change this to use a different database
@@ -50,6 +51,7 @@ def ensure_user_in_review_db(db, username, ip_address=None):
 
 def review_start(db):
     try:
+        ensure_consent_form_column(db.get())
         username = extract_username()
         labeler_id = ensure_user_in_review_db(db, username, request.remote_addr)
         
@@ -69,6 +71,7 @@ def review_start(db):
 
 def review_result(db):
     try: #validation, setup
+        ensure_consent_form_column(db.get())
         if "annotations" not in request.args: abort(400)
         
         username = extract_username()

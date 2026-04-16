@@ -69,6 +69,13 @@ def reviewer_set_username(db):
     is_certified_audiologist = get_param("is-certified-audiologist")
     experience_years = get_param("experience-years")
     consent_form = request.files.get('filled-consent-form')
+    test_type_param = (get_param("t") or "patient").lower().replace("-", "_")
+    if test_type_param == "in_clinic_audiologist":
+        test_type = "in_clinic_audiologist"
+    elif test_type_param in ("prepilot", "pilot", "patient"):
+        test_type = test_type_param
+    else:
+        test_type = "patient"
     
     role = None
     years_practicing = None
@@ -95,11 +102,14 @@ def reviewer_set_username(db):
             review_conn.execute("PRAGMA foreign_keys = ON")
             ensure_consent_form_column(review_conn)
             
-            existing_reviewer = review_conn.execute(
-                "SELECT id FROM reviewers WHERE username = ?", (name,)
+            row = review_conn.execute(
+                "SELECT id, test_type FROM reviewers WHERE username = ?", (name,)
             ).fetchone()
-            
+            existing_reviewer = row[0] if row else None
+            stored_tt = (row[1] if row else None) or "patient"
+
             if existing_reviewer:
+                test_type = stored_tt
                 if consent_form:
                     review_conn.close()
                     return json.dumps({"error": "We already have a consent form for you. You may log in as a returning reviewer with only your email."}, indent=4), 400
@@ -112,7 +122,7 @@ def reviewer_set_username(db):
                     return json.dumps({"error": "Please select whether you are an audiology student or certified audiologist."}, indent=4), 400
                 
                 success, error_message, file_path = process_consent_form_upload(
-                    review_conn, name, role, years_practicing, consent_form
+                    review_conn, name, role, years_practicing, consent_form, test_type
                 )
                 
                 if not success:
@@ -151,6 +161,14 @@ def reviewer_set_username(db):
         "INSERT INTO user_info (user, info_key, value) "
         "VALUES (?, 'searchParams', ?)",
         (uid, search))
+    if db.queryone("SELECT 1 FROM user_info WHERE user = ? AND info_key = 'test-type'", (uid,)):
+        db.execute(
+            "UPDATE user_info SET value = ? WHERE user = ? AND info_key = 'test-type'",
+            (test_type, uid))
+    else:
+        db.execute(
+            "INSERT INTO user_info (user, info_key, value) VALUES (?, 'test-type', ?)",
+            (uid, test_type))
 
     session.clear()
     session["user"], session["username"] = uid, name

@@ -6,7 +6,8 @@ def get_reviewer_state(db, username):
     """Get reviewer state from database. Recalculates total_reviews for accuracy."""
     try:
         result = db.queryone(
-            "SELECT test_in_progress, completed_tests, remaining_tests, most_recent_subject, total_reviews, played_audio FROM reviewers WHERE username = ?",
+            "SELECT test_in_progress, completed_tests, remaining_tests, most_recent_subject, total_reviews, played_audio, test_type "
+            "FROM reviewers WHERE username = ?",
             (username,))
         if result:
             user_result = db.queryone("SELECT id FROM users WHERE username = ?", (username,))
@@ -22,23 +23,27 @@ def get_reviewer_state(db, username):
                     except:
                         pass
                 # dictionary holding reviewer state
+                tt = result[6] if len(result) > 6 and result[6] else 'patient'
                 return {
                     'test_in_progress': json.loads(result[0]) if result[0] else None,
                     'completed_tests': json.loads(result[1]) if result[1] else [],
                     'remaining_tests': json.loads(result[2]) if result[2] else [],
                     'most_recent_subject': result[3],
                     'total_reviews': actual_count,
-                    'played_audio': json.loads(result[5]) if result[5] else []
+                    'played_audio': json.loads(result[5]) if result[5] else [],
+                    'reviewer_test_type': tt,
                 }
             else:
                 stored_count = result[4] if result[4] is not None else 0
+                tt = result[6] if len(result) > 6 and result[6] else 'patient'
                 return {
                     'test_in_progress': json.loads(result[0]) if result[0] else None,
                     'completed_tests': json.loads(result[1]) if result[1] else [],
                     'remaining_tests': json.loads(result[2]) if result[2] else [],
                     'most_recent_subject': result[3],
                     'total_reviews': stored_count,
-                    'played_audio': json.loads(result[5]) if result[5] else []
+                    'played_audio': json.loads(result[5]) if result[5] else [],
+                    'reviewer_test_type': tt,
                 }
     except Exception:
         pass
@@ -48,7 +53,8 @@ def get_reviewer_state(db, username):
         'remaining_tests': [],
         'most_recent_subject': None,
         'total_reviews': 0,
-        'played_audio': []
+        'played_audio': [],
+        'reviewer_test_type': 'patient',
     }
 
 
@@ -181,12 +187,13 @@ def calculate_and_update_remaining_tests(db, username, user_id):
     
     try:
         from review_modules import queries
-        available_tests = queries.get_available_tests(db, user_id)
-        state = get_reviewer_state(db, username)
-        completed_tests = state['completed_tests']
+        rev_state = get_reviewer_state(db, username)
+        in_clinic = rev_state['reviewer_test_type'] == 'in_clinic_audiologist'
+        available_tests = queries.get_available_tests(db, user_id, in_clinic=in_clinic)
+        completed_tests = rev_state['completed_tests']
         completed_set = {(t["subject"], t["project"]) for t in completed_tests}
         
-        test_in_progress = state['test_in_progress']
+        test_in_progress = rev_state['test_in_progress']
         in_progress_set = set()
         if test_in_progress:
             in_progress_set.add((test_in_progress["subject"], test_in_progress["project"]))

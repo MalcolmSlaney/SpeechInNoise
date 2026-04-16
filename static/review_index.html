@@ -22,7 +22,6 @@
       </div>
     <div id="three-column-row" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; width: 100%; padding: 1rem 0;">
       <div class="column" style="background-color: rgba(254, 85, 85, 0.1); border-radius: 10px; margin-left: 2.5%;">
-        <div>
         <div id="instructions">
 
 
@@ -47,8 +46,9 @@
     </div>
 
       <h1>Get Started</h1>
-      <form action="javascript:;" onsubmit="claim_username_review()" class="userbox"
+      <form id="login-form" action="javascript:;" onsubmit="claim_username_review()" class="userbox"
           autocomplete="off" enctype="multipart/form-data">
+          <div id="patient-reviewer-options">
           I am a new reviewer: <input type="checkbox" id="new-reviewer" onchange="if(this.checked) { document.getElementById('returning-reviewer').checked=false; document.getElementById('new-fields').style.display='block'; } else { document.getElementById('new-fields').style.display='none'; } updateEmailFormVisibility();" />
           <br>
           I am a returning reviewer: <input type="checkbox" id="returning-reviewer" onchange="if(this.checked) { document.getElementById('new-reviewer').checked=false; document.getElementById('new-fields').style.display='none'; } updateEmailFormVisibility();" />
@@ -78,7 +78,7 @@
             <br><br>
             We will use your email address to issue payment.
           </div>
-        
+          </div>
         <div id="email-form-container" style="display:none">
           Please enter your email address to begin.
           <br><br>
@@ -90,8 +90,8 @@
           --><input type="submit" id="submit" value="start scoring" disabled />
           <span id="username-status"></span>
         </div>
+      </form>
 
-    </div>
       </div>
       <div class="column" style="background-color: rgba(85, 116, 254, 0.1); border-radius: 10px; margin-right: 2.5%;">
         <h1>Example</h1>
@@ -125,15 +125,22 @@
       <label for="prepilot">prepilot</label>
       <span class="h-radio-spacer"></span>
       <input type="radio" id="pilot" name="test-type" />
-      <label for="pilot">pilot</label>
-      <span class="h-radio-spacer"></span> -->
-      <input type="radio" id="patient" name="test-type" checked />
+      <label for="pilot">pilot</label> -->
+      <span class="h-radio-spacer"></span>
+      <input type="radio" id="patient" name="test-type" form="login-form" checked onchange="syncReviewEntryMode()" />
       <label for="patient">Collecting Data</label>
-    </form>
+      <span class="h-radio-spacer"></span>
+      <input type="radio" id="in-clinic-audiologist" name="test-type" form="login-form" onchange="syncReviewEntryMode()" />
+      <label for="in-clinic-audiologist">in-clinic audiologist</label>
     <br><br>
 
   </div>
   <script>
+    function syncReviewEntryMode() {
+      updateEmailFormVisibility();
+      check_username();
+    }
+
     function check_username() {
       const el = document.getElementById("username");
       const submit = document.getElementById("submit");
@@ -291,6 +298,7 @@
 
     // Initialize waveform and scoring for example audio (hardcoded file)
     window.addEventListener('load', () => {
+      syncReviewEntryMode();
       // Create audio element from playback-interface button (like index.js does)
       const samples = document.getElementById("samples");
       if (samples) {
