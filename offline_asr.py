@@ -95,9 +95,9 @@ def filter_segment(segment: dict, prompt_time: float):
     segment['words'] = filter_words(segment['words'], prompt_time)
     return segment
 
-def adjust_timing(asr_result: Dict[str, Any], 
-                  prompt_length: float=1, # Seconds
-                  ) -> Dict[str, Any]:
+def remove_prompt_from_results(asr_result: Dict[str, Any], 
+                               prompt_length: float=1, # Seconds
+                               ) -> Dict[str, Any]:
   """Filter out ASR results that occur during the audio prompt, and adjust 
   timestamps to be relative to the end of the prompt."""
   filtered = copy.deepcopy(asr_result)
@@ -219,7 +219,7 @@ def recognize_with_prompt(audio_path: str,
         if debug:
           print("ASR result for combined audio:", asr_result)
         if adjust_timing:
-          adjusted_result = adjust_timing(
+          adjusted_result = remove_prompt_from_results(
             asr_result, prompt_length=prompt_length)
           if debug:
             print("Adjusted ASR result after filtering prompt:", adjusted_result)
