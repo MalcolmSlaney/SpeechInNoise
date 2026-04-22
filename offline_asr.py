@@ -223,7 +223,8 @@ def recognize_with_prompt(audio_path: str,
           adjusted_result = remove_prompt_from_results(
             asr_result, prompt_length=prompt_length)
           if debug:
-            print("Adjusted ASR result after filtering prompt:", adjusted_result)
+            print("Adjusted ASR result after filtering prompt:")
+            pprint.pprint(adjusted_result)
         else:
           adjusted_result = asr_result
     finally:
