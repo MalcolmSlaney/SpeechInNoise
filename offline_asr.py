@@ -266,6 +266,7 @@ def main(asr_class_name: str,
          db_file: str, 
          single_word_projects: str = '',
          num_workers: int = 1,
+         count: int = 0,
          audio_prompt_dict: Dict[str, Tuple[str, float]] = {}
          ):
     
@@ -280,6 +281,9 @@ def main(asr_class_name: str,
         print("No tasks found.")
         return
 
+    if count > 0:
+        tasks = tasks[:count]
+        print(f"Limiting to first {count} tasks for testing.")
     print(f"Processing {len(tasks)} tasks using {num_workers} worker(s)...")
 
     # Bind the static arguments to our worker function

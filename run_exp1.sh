@@ -9,16 +9,28 @@
 
 
 for prompt in noprompt prompt; do
-  if [ "$prompt" == "noprompt" ]; then
+  if [[ "$prompt" == noprompt ]]; then
     echo "Running experiment without prompts..."
     project_list=""
   else
     echo "Running experiment with prompts..."
     project_list="cnc,win,nu6"
   fi
-  dbfile = experiments_exp1_${prompt}.db
+  dbfile=experiments_exp1_${prompt}.db
+  rm -f $dbfile
   cp experiments.db $dbfile
-  python migrate_experiments.py --dbfile $dbfile
-  python clean_experiments.py --dbfile $dbfile --nodry_run
-  python offline_asr.py --dbfile $dbfile --single_word_projects="$project_list"
+  chmod 644 $dbfile
+
+  python migration.py --dbfile $dbfile
+  python clear_single_word_asr.py --dbfile $dbfile --nodry_run
+  python offline_asr.py --dbfile $dbfile --single_word_projects="$project_list" \
+    --num_workers 6 
+done
+
+
+for prompt in noprompt prompt; do
+  dir=exp1/exp1_${prompt}_results
+  mkdir -p $dir
+  python analyze_results.py --dbfile experiments_exp1_${prompt}.db > $dir/analysis.txt
+  mv asr_audiology_discrepancies.html confusion_matrices.png quicksin_results.csv $dir/
 done
