@@ -257,12 +257,16 @@ def process_audio_task(task: Tuple,
                                              debug=debug)
           asr_result2 = worker_asr_engine.recognize(test_filename)
           if debug:
-            print('ASR result with prompt:', asr_result['text'])
+            print('ASR result with prompt:')
+            pprint.pprint(asr_result)
             print('')
-            print('ASR result without prompt:', asr_result2['text'])
+            print('ASR result without prompt:' )
+            pprint.pprint(asr_result2)
             sys.stdout.flush()
         else:
           asr_result = worker_asr_engine.recognize(test_filename)
+          if debug:
+            print('No prompt asr result:', asr_result)
         
         return rowid, asr_result, None
     except Exception as e:
