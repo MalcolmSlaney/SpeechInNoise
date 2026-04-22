@@ -217,7 +217,8 @@ def recognize_with_prompt(audio_path: str,
     try:
         asr_result = worker_asr_engine.recognize(combined_path)
         if debug:
-          print("ASR result for combined audio:", asr_result)
+          print("ASR result for combined audio:")
+          pprint.pprint(asr_result)
         if adjust_timing:
           adjusted_result = remove_prompt_from_results(
             asr_result, prompt_length=prompt_length)
@@ -253,7 +254,6 @@ def process_audio_task(task: Tuple,
           asr_result = recognize_with_prompt(test_filename, 
                                              prompt_filename, 
                                              prompt_audio_length, 
-                                             adjust_timing=False,
                                              debug=debug)
           asr_result2 = worker_asr_engine.recognize(test_filename)
           if debug:
