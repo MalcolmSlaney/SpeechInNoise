@@ -207,7 +207,8 @@ def update(con: sqlite3.Connection, rowid: int, res: dict):
 def recognize_with_prompt(audio_path: str, 
                           prompt_path: str,
                           prompt_length: float,
-                          adjust_timing: bool = True) -> Dict[str, Any]:
+                          adjust_timing: bool = True,
+                          debug: bool = False) -> Dict[str, Any]:
     """Concatenates the prompt audio with the target audio, runs ASR on the 
     combined file, and then filters the results to only include words that 
     occur after the prompt."""
@@ -215,9 +216,13 @@ def recognize_with_prompt(audio_path: str,
     combined_result = {}
     try:
         asr_result = worker_asr_engine.recognize(combined_path)
+        if debug:
+          print("ASR result for combined audio:", asr_result)
         if adjust_timing:
           adjusted_result = adjust_timing(
             asr_result, prompt_length=prompt_length)
+          if debug:
+            print("Adjusted ASR result after filtering prompt:", adjusted_result)
         else:
           adjusted_result = asr_result
     finally:
@@ -228,6 +233,7 @@ def recognize_with_prompt(audio_path: str,
 def process_audio_task(task: Tuple, 
                        project_list: List[str], 
                        audio_prompt_dict: Dict[str, Tuple[str, float]] = {},
+                       debug: bool = False,
                        ) -> Tuple[int, Optional[Dict[str, Any]], Optional[str]]:
     """
     Executes the expensive ASR task using the process-local model.
@@ -240,18 +246,21 @@ def process_audio_task(task: Tuple,
     try:
         if project in project_list and username in audio_prompt_dict:
           prompt_filename, prompt_audio_length = audio_prompt_dict[username]
-          print('\n**********************************************')
-          print('Adding prompt for user', username, 'in project', project, 
-                'of length', prompt_audio_length, 'seconds')
+          if debug:
+            print('\n**********************************************')
+            print('Adding prompt for user', username, 'in project', project, 
+                  'of length', prompt_audio_length, 'seconds')
           asr_result = recognize_with_prompt(test_filename, 
                                              prompt_filename, 
                                              prompt_audio_length, 
-                                             adjust_timing=False)
+                                             adjust_timing=False,
+                                             debug=debug)
           asr_result2 = worker_asr_engine.recognize(test_filename)
-          print('ASR result with prompt:', asr_result['text'])
-          print('')
-          print('ASR result without prompt:', asr_result2['text'])
-          sys.stdout.flush()
+          if debug:
+            print('ASR result with prompt:', asr_result['text'])
+            print('')
+            print('ASR result without prompt:', asr_result2['text'])
+            sys.stdout.flush()
         else:
           asr_result = worker_asr_engine.recognize(test_filename)
         
@@ -266,8 +275,9 @@ def main(asr_class_name: str,
          db_file: str, 
          single_word_projects: str = '',
          num_workers: int = 1,
+         audio_prompt_dict: Dict[str, Tuple[str, float]] = {},
          count: int = 0,
-         audio_prompt_dict: Dict[str, Tuple[str, float]] = {}
+         debug: bool = False,
          ):
     
     print(f'Offline_ASR started at {datetime.now()} with {db_file}')
@@ -290,7 +300,8 @@ def main(asr_class_name: str,
     worker_func = partial(
         process_audio_task,
         project_list=single_word_project_list,
-        audio_prompt_dict=audio_prompt_dict
+        audio_prompt_dict=audio_prompt_dict,
+        debug=debug
     )
 
     row_count = 0
@@ -366,7 +377,10 @@ if __name__ == "__main__":
                 "use the correct answer as the model prompt; can help accuracy "
                 "but can also bias results towards correct"))
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--debug", action="store_true")
     
+    parser.add_argument("--count", type=int, default=0,
+                        help="For testing: only process this many rows and then quit.")
     parser.add_argument("--num_workers", type=int, default=1,
                         help="Number of concurrent workers for ASR processing. "
                              "Warning: Running multiple workers will multiply your RAM/VRAM usage.")
@@ -404,4 +418,6 @@ if __name__ == "__main__":
          args.dbfile,
          args.single_word_projects, 
          args.num_workers,
-         audio_prompt_dict)
+         audio_prompt_dict,
+         args.count,
+         args.debug)
