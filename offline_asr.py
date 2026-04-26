@@ -593,7 +593,7 @@ def run_main(argv):
     assert os.path.exists(FLAGS.language_prompt_file), f'Missing {FLAGS.language_prompt_file}'
 
     if FLAGS.force:
-        model_type = 'default' if not FLAGS.useprompt else 'prompted'
+        model_type = 'default' if not FLAGS.use_prompt else 'prompted'
         deduplicate(
             FLAGS.dbfile,
             model_name=FLAGS.model,
@@ -622,7 +622,7 @@ def run_main(argv):
             print(f"User '{username}' does not have a valid file for priming.")
     print(f"Total users with valid priming files: {count}")
 
-    asr_class_name = 'PromptedWhisperASR' if FLAGS.useprompt else 'WhisperASR'
+    asr_class_name = 'PromptedWhisperASR' if FLAGS.use_prompt else 'WhisperASR'
 
     main(
         asr_class_name=asr_class_name,
