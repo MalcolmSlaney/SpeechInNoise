@@ -81,6 +81,16 @@ flags.DEFINE_integer(
     1,
     'Number of concurrent workers for ASR processing. Running multiple workers will multiply your RAM/VRAM usage.'
 )
+flags.DEFINE_boolean(
+    'use_prompt',
+    False,
+    'If True, load valid words from --valid_words_json and build prompts for each project.'
+)
+flags.DEFINE_string(
+    'valid_words_json',
+    '',
+    'Path to a JSON file containing the project->valid words dictionary output by extract_valid_words.py.'
+)
 
 #################### Audio Processing Functions ####################
 
@@ -271,6 +281,36 @@ def get_highest_snr_files_with_duration(db_file: str,
     return results_dict
 
 
+def build_project_prompt_map(valid_words_json: str) -> Dict[str, str]:
+    """Build a prompt string for each project from the valid words JSON (which 
+    is based on the ground truth for each project).
+
+    Args:
+        valid_words_json: Path to a JSON file containing the 
+        project-to-words mapping.
+
+    Returns:
+        A dictionary mapping each project name to a prompt string of the form:
+        "Please select from the following list of words. <word list>"
+    """
+    if not os.path.exists(valid_words_json):
+        raise FileNotFoundError(f'Valid words JSON file not found: {valid_words_json}')
+
+    with open(valid_words_json, 'r', encoding='utf-8') as f:
+        project_words = json.load(f)
+
+    prompt_map: Dict[str, str] = {}
+    for project, words in project_words.items():
+        if not isinstance(words, list):
+            raise ValueError(f'Expected a list of words for project {project}, got {type(words).__name__}')
+        word_list = ', '.join(words)
+        prompt_map[project] = (
+            'Please select from the following list of words. '
+            f'{word_list}'
+        )
+    return prompt_map
+
+
 #################### ASR Worker Functions ####################
 
 # --- Global variable to hold the worker's specific model ---
@@ -340,6 +380,7 @@ def recognize_with_priming(audio_path: str,
                            priming_path: str,
                            priming_length: float,
                            adjust_timing: bool = True,
+                           initial_prompt: str = '',
                            debug: bool = False) -> Dict[str, Any]:
     """Run ASR on combined priming and target audio, then discard the prime.
 
@@ -348,6 +389,7 @@ def recognize_with_priming(audio_path: str,
         priming_path: Path to the priming audio file.
         priming_length: Duration of the priming audio in seconds.
         adjust_timing: If True, timestamps are rebased after removing the prime.
+        initial_prompt: The initial prompt to use for ASR.
         debug: If True, print debug output for ASR results.
 
     Returns:
@@ -356,7 +398,8 @@ def recognize_with_priming(audio_path: str,
     combined_path = concatenate_audio_files(priming_path, audio_path)
     combined_result = {}
     try:
-        asr_result = worker_asr_engine.recognize(combined_path)
+        asr_result = worker_asr_engine.recognize(combined_path, 
+                                                 initial_prompt=initial_prompt)
         if debug:
           print("ASR result for combined audio:")
           pprint.pprint(asr_result)
@@ -376,14 +419,18 @@ def recognize_with_priming(audio_path: str,
 def process_audio_task(task: Tuple, 
                        project_list: List[str], 
                        audio_priming_dict: Dict[str, Tuple[str, float]] = {},
+                       prompt_map: Dict[str, str] = {},
                        debug: bool = False,
                        ) -> Tuple[int, Optional[Dict[str, Any]], Optional[str]]:
-    """Perform ASR on a single pending audio task.
+    """Perform ASR on a single pending audio task. 
+
+    Use a prompt and audio priming only for the single word projects.
 
     Args:
         task: A tuple representing a pending audio_results row.
         project_list: List of single-word projects that require priming.
         audio_priming_dict: Mapping from username to priming audio file and duration.
+        initial_prompt: Optional initial prompt string to use for ASR.
         debug: If True, print debug output during processing.
 
     Returns:
@@ -395,6 +442,10 @@ def process_audio_task(task: Tuple,
     # SQL Result: audio_results.id, reply_filename, project, data, users.username
     rowid, fname, project, audio_asr_data, username = task
     test_filename = audio_to_filename(fname)
+    if project in project_list and project in prompt_map:
+        if debug:
+            print(f'Using prompt for project {project}: {prompt_map[project]}')
+        initial_prompt = prompt_map[project]
     try:
         if project in project_list and username in audio_priming_dict:
           priming_filename, priming_audio_length = audio_priming_dict[username]
@@ -405,18 +456,23 @@ def process_audio_task(task: Tuple,
           asr_result = recognize_with_priming(test_filename, 
                                              priming_filename, 
                                              priming_audio_length, 
+                                             initial_prompt=initial_prompt,
                                              debug=debug)
           if debug:
             print('ASR result with prime:')
             pprint.pprint(asr_result)
             print('')
             # Do it again without the prime just to see the difference
-            asr_result2 = worker_asr_engine.recognize(test_filename)
+            asr_result2 = worker_asr_engine.recognize(
+               test_filename, 
+               initial_prompt=initial_prompt)
             print('ASR result without prime:' )
             pprint.pprint(asr_result2)
             sys.stdout.flush()
         else:
-          asr_result = worker_asr_engine.recognize(test_filename)
+          asr_result = worker_asr_engine.recognize(
+             test_filename, 
+             initial_prompt=initial_prompt)
           if debug:
             print('No prime asr result:', asr_result)
         
@@ -432,6 +488,7 @@ def main(asr_class_name: str,
          single_word_projects: str = '',
          num_workers: int = 1,
          audio_priming_dict: Dict[str, Tuple[str, float]] = {},
+         prompt_map: Dict[str, str] = {},
          count: int = 0,
          debug: bool = False,
          ):
@@ -468,6 +525,7 @@ def main(asr_class_name: str,
         process_audio_task,
         project_list=single_word_project_list,
         audio_priming_dict=audio_priming_dict,
+        prompt_map=prompt_map,
         debug=debug
     )
 
@@ -541,6 +599,12 @@ def run_main(argv):
             model_name=FLAGS.model,
             model_type=model_type)
 
+    project_prompts: Dict[str, str] = {}
+    if FLAGS.use_prompt and FLAGS.valid_words_json:
+        project_prompts = build_project_prompt_map(FLAGS.valid_words_json)
+        if FLAGS.debug:
+            print(f'Loaded prompt strings for {len(project_prompts)} projects.')
+
     # Get the a dictionary of good audio responses that we can prepend to the 
     # target audio for single-word tests.
     audio_priming_dict = get_highest_snr_files_with_duration(FLAGS.dbfile,
@@ -557,14 +621,15 @@ def run_main(argv):
     asr_class_name = 'PromptedWhisperASR' if FLAGS.prompted else 'WhisperASR'
 
     main(
-        asr_class_name,
-        FLAGS.model,
-        FLAGS.dbfile,
-        FLAGS.single_word_projects,
-        FLAGS.num_workers,
-        audio_priming_dict,
-        FLAGS.count,
-        FLAGS.debug)
+        asr_class_name=asr_class_name,
+        model_name=FLAGS.model,
+        db_file=FLAGS.dbfile,
+        single_word_projects=FLAGS.single_word_projects,
+        num_workers=FLAGS.num_workers,
+        audio_priming_dict=audio_priming_dict,
+        prompt_map=project_prompts,
+        count=FLAGS.count,
+        debug=FLAGS.debug)
 
 
 if __name__ == '__main__':
