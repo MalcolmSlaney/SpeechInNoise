@@ -8,6 +8,9 @@
 # prompts) that can be analyzed with the analyze_experiments.py script.
 
 
+# This is really testing (acoustic) priming, not prompting.  Wrong name
+# being used here.
+
 for prompt in noprompt prompt; do
   if [[ "$prompt" == noprompt ]]; then
     echo "Running experiment without prompts..."

@@ -57,11 +57,6 @@ flags.DEFINE_string(
     'Audio file to prompt recognizer to use English.'
 )
 flags.DEFINE_boolean(
-    'prompted',
-    False,
-    'Use the correct answer as the model prompt; can help accuracy but can also bias results towards correct.'
-)
-flags.DEFINE_boolean(
     'force',
     False,
     'If set, remove any duplicate ASR rows matching the current model parameters before processing.'
@@ -80,6 +75,11 @@ flags.DEFINE_integer(
     'num_workers',
     1,
     'Number of concurrent workers for ASR processing. Running multiple workers will multiply your RAM/VRAM usage.'
+)
+flags.DEFINE_boolean(
+    'use_prime',
+    False,
+    'Prepend the test utterance so there are two copies, and only score the second copy.'
 )
 flags.DEFINE_boolean(
     'use_prompt',
@@ -593,7 +593,7 @@ def run_main(argv):
     assert os.path.exists(FLAGS.language_prompt_file), f'Missing {FLAGS.language_prompt_file}'
 
     if FLAGS.force:
-        model_type = 'default' if not FLAGS.prompted else 'prompted'
+        model_type = 'default' if not FLAGS.useprompt else 'prompted'
         deduplicate(
             FLAGS.dbfile,
             model_name=FLAGS.model,
@@ -607,8 +607,12 @@ def run_main(argv):
 
     # Get the a dictionary of good audio responses that we can prepend to the 
     # target audio for single-word tests.
-    audio_priming_dict = get_highest_snr_files_with_duration(FLAGS.dbfile,
-                                                            'quick')
+    if FLAGS.use_prime:
+      audio_priming_dict = get_highest_snr_files_with_duration(FLAGS.dbfile,
+                                                              'quick')
+    else:
+       audio_priming_dict = {}
+
     count = 0
     for username, (priming_filename, priming_length) in audio_priming_dict.items():
         if priming_filename is not None:
@@ -618,7 +622,7 @@ def run_main(argv):
             print(f"User '{username}' does not have a valid file for priming.")
     print(f"Total users with valid priming files: {count}")
 
-    asr_class_name = 'PromptedWhisperASR' if FLAGS.prompted else 'WhisperASR'
+    asr_class_name = 'PromptedWhisperASR' if FLAGS.useprompt else 'WhisperASR'
 
     main(
         asr_class_name=asr_class_name,
