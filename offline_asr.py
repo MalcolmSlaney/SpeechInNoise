@@ -430,7 +430,7 @@ def process_audio_task(task: Tuple,
         task: A tuple representing a pending audio_results row.
         project_list: List of single-word projects that require priming.
         audio_priming_dict: Mapping from username to priming audio file and duration.
-        initial_prompt: Optional initial prompt string to use for ASR.
+        prompt_map: Mapping from project name to initial prompt string.
         debug: If True, print debug output during processing.
 
     Returns:
@@ -442,10 +442,14 @@ def process_audio_task(task: Tuple,
     # SQL Result: audio_results.id, reply_filename, project, data, users.username
     rowid, fname, project, audio_asr_data, username = task
     test_filename = audio_to_filename(fname)
-    if project in project_list and project in prompt_map:
+
+    if project in project_list and prompt_map and project in prompt_map:
         if debug:
             print(f'Using prompt for project {project}: {prompt_map[project]}')
         initial_prompt = prompt_map[project]
+    else:
+       initial_prompt = ''
+
     try:
         if project in project_list and username in audio_priming_dict:
           priming_filename, priming_audio_length = audio_priming_dict[username]
