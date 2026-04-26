@@ -85,8 +85,13 @@ flags.DEFINE_integer(
 #################### Audio Processing Functions ####################
 
 def get_wav_duration_seconds(file_path: str) -> float:
-  """
-  Reads a WAV file and returns its length in seconds.
+  """Return the duration of a WAV file in seconds.
+
+  Args:
+      file_path: Path to the WAV file.
+
+  Returns:
+      The length of the WAV file in seconds, or -1.0 if the file could not be read.
   """
   try:
     samplerate, data = scipy.io.wavfile.read(file_path)
@@ -101,9 +106,17 @@ def get_wav_duration_seconds(file_path: str) -> float:
 
 
 def concatenate_audio_files(input_file1: str, input_file2: str) -> str:
-  """
-  Concatenates two audio files using ffmpeg, saves the result to a temporary WAV file,
-  and returns the filename of the temporary output.
+  """Concatenate two WAV files into a temporary output file.
+
+  Args:
+      input_file1: The first audio file to concatenate.
+      input_file2: The second audio file to concatenate.
+
+  Returns:
+      The path to the generated temporary WAV file.
+
+  Raises:
+      RuntimeError: If ffmpeg fails to concatenate the files.
   """
   temp_output_filename = tempfile.mktemp(suffix='.wav')
 
@@ -122,8 +135,15 @@ def concatenate_audio_files(input_file1: str, input_file2: str) -> str:
   return temp_output_filename
 
 def audio_to_filename(fname, basename=basename):
-    """Translate the reply_filename from the database into an actual file 
-    path on disk."""
+    """Convert a reply filename from the database into a local WAV path.
+
+    Args:
+        fname: The reply filename stored in the database.
+        basename: The base directory of the repository.
+
+    Returns:
+        The full path to the WAV file in the uploads directory.
+    """
 
     return os.path.join(basename, "uploads", fname + ".wav")
    
@@ -131,10 +151,27 @@ def audio_to_filename(fname, basename=basename):
 #################### Audio Priming and Timing Adjustment ####################
 
 def assemble_words(asr_result: dict):
+  """Extract words from Whisper result segments.
+
+  Args:
+      asr_result: The raw Whisper ASR result dictionary.
+
+  Returns:
+      A flat list of word strings extracted from all segments.
+  """
   nested_list = [[w['word'] for w in s['words']] for s in asr_result['segments']]
   return [item for sublist in nested_list for item in sublist]
 
 def filter_words(words: List[dict], priming_time: float):
+  """Remove words from the prime segment and rebased timestamps.
+
+  Args:
+      words: A list of word dictionaries from Whisper output.
+      priming_time: The duration of the priming audio in seconds.
+
+  Returns:
+      A filtered list of word dictionaries with timestamps rebased to the end of the prime.
+  """
   results = []
   for word in words:
     if word['start'] < priming_time:
@@ -145,6 +182,15 @@ def filter_words(words: List[dict], priming_time: float):
   return results
 
 def filter_segment(segment: dict, priming_time: float):
+  """Adjust a segment to remove audio from the priming window.
+
+  Args:
+      segment: A Whisper segment dictionary containing timing and words.
+      priming_time: The duration of the priming audio in seconds.
+
+  Returns:
+      The adjusted segment with timestamps rebased, or None if the entire segment falls within the prime.
+  """
   if segment['end'] < priming_time:
     return None
   else:
@@ -156,8 +202,16 @@ def filter_segment(segment: dict, priming_time: float):
 def remove_prime_from_results(asr_result: Dict[str, Any], 
                                priming_length: float=1, # Seconds
                                ) -> Dict[str, Any]:
-  """Filter out ASR results that occur during the audio prime, and adjust 
-  timestamps to be relative to the end of the prime."""
+  """Remove priming audio from ASR results and rebase timestamps.
+
+  Args:
+      asr_result: The raw Whisper result dictionary.
+      priming_length: Length of the priming audio in seconds.
+
+  Returns:
+      A new Whisper result dictionary with segments and words adjusted so that
+      timestamps start at the end of the prime.
+  """
   filtered = copy.deepcopy(asr_result)
   new_segments = []
   for segment in filtered['segments']:
@@ -173,12 +227,15 @@ def remove_prime_from_results(asr_result: Dict[str, Any],
 def get_highest_snr_files_with_duration(db_file: str, 
                                         project_name: str = 'quick',
                                         ) -> Dict[str, Tuple[str, float]]:
-    """
-    For each user in the database, retrieves the reply_filename of their trial 
-    with the highest SNR for a given project,
-    
+    """Find the highest SNR response file for each user for a project.
+
+    Args:
+        db_file: Path to the SQLite database.
+        project_name: The project name to filter audio trials.
+
     Returns:
-        dict: { 'username': ('/full/path/to/file.wav', duration_in_seconds) }
+        A dictionary mapping username to a tuple containing the full WAV path
+        and its duration in seconds.
     """
     query = """
         SELECT u.username, r.reply_filename
@@ -220,9 +277,11 @@ def get_highest_snr_files_with_duration(db_file: str,
 worker_asr_engine = None
 
 def init_worker(asr_class_name: str, model_name: str):
-    """
-    Initializes the PyTorch model INSIDE the worker process.
-    This prevents PyTorch from trying to share file descriptors across processes.
+    """Initialize the worker process model instance.
+
+    Args:
+        asr_class_name: Name of the ASR wrapper class to instantiate.
+        model_name: Whisper model name to load in the worker process.
     """
     global worker_asr_engine
     
@@ -231,6 +290,14 @@ def init_worker(asr_class_name: str, model_name: str):
     worker_asr_engine = asr_class(model_name)
 
 def get_audio_queue(con: sqlite3.Connection):
+    """Return audio trials that still need ASR processing.
+
+    Args:
+        con: An open SQLite connection.
+
+    Returns:
+        A list of pending audio_result rows that have no ASR data.
+    """
     cur = con.execute(
       "SELECT audio_results.id, reply_filename, project, data, users.username "
       "FROM audio_results "
@@ -248,6 +315,13 @@ def get_audio_queue(con: sqlite3.Connection):
 
 
 def update(con: sqlite3.Connection, rowid: int, res: dict):
+    """Write ASR results into the database for a single trial.
+
+    Args:
+        con: An open SQLite connection.
+        rowid: The audio_results row ID for which the ASR result applies.
+        res: The ASR result dictionary to store.
+    """
     res_json = json.dumps(res)
     cur = con.cursor()
     
@@ -267,9 +341,18 @@ def recognize_with_priming(audio_path: str,
                            priming_length: float,
                            adjust_timing: bool = True,
                            debug: bool = False) -> Dict[str, Any]:
-    """Concatenates the priming audio with the target audio, runs ASR on the 
-    combined file, and then filters the results to only include words that 
-    occur after the priming audio."""
+    """Run ASR on combined priming and target audio, then discard the prime.
+
+    Args:
+        audio_path: Path to the target audio file.
+        priming_path: Path to the priming audio file.
+        priming_length: Duration of the priming audio in seconds.
+        adjust_timing: If True, timestamps are rebased after removing the prime.
+        debug: If True, print debug output for ASR results.
+
+    Returns:
+        The filtered ASR result dictionary after removing the priming segment.
+    """
     combined_path = concatenate_audio_files(priming_path, audio_path)
     combined_result = {}
     try:
@@ -295,8 +378,17 @@ def process_audio_task(task: Tuple,
                        audio_priming_dict: Dict[str, Tuple[str, float]] = {},
                        debug: bool = False,
                        ) -> Tuple[int, Optional[Dict[str, Any]], Optional[str]]:
-    """
-    Executes the expensive ASR task using the process-local model.
+    """Perform ASR on a single pending audio task.
+
+    Args:
+        task: A tuple representing a pending audio_results row.
+        project_list: List of single-word projects that require priming.
+        audio_priming_dict: Mapping from username to priming audio file and duration.
+        debug: If True, print debug output during processing.
+
+    Returns:
+        A tuple containing the row ID, ASR result dictionary or None,
+        and an optional error message.
     """
     global worker_asr_engine
     
@@ -343,7 +435,18 @@ def main(asr_class_name: str,
          count: int = 0,
          debug: bool = False,
          ):
-    
+    """Process pending audio results through Whisper ASR.
+
+    Args:
+        asr_class_name: The name of the ASR engine class to instantiate.
+        model_name: The Whisper model name to load.
+        db_file: Path to the SQLite database file.
+        single_word_projects: Comma-separated list of projects that require priming.
+        num_workers: Number of parallel worker processes to use.
+        audio_priming_dict: Mapping of username to priming audio path and duration.
+        count: Optional limit on the number of tasks to process.
+        debug: If True, enable verbose debug output.
+    """
     print(f'Offline_ASR started at {datetime.now()} with {db_file}')
     single_word_project_list = single_word_projects.split(',') if single_word_projects else []
     
@@ -404,7 +507,12 @@ def main(asr_class_name: str,
 
     
 def deduplicate(db_file: str, **kw):
-  """????"""
+  """Delete duplicate audio_asr rows matching the provided keys.
+
+  Args:
+      db_file: Path to the SQLite database.
+      **kw: Key/value pairs used to identify duplicates in the JSON data.
+  """
   con = sqlite3.connect(db_file)
   dup, sep = "json_extract(data, '$.' || ?) = ?", " AND "
   clause = sep.join((dup,) * len(kw))
@@ -415,6 +523,12 @@ def deduplicate(db_file: str, **kw):
   con.close()
 
 def run_main(argv):
+    """Parse absl flags and run the offline ASR processing pipeline.
+
+    Args:
+        argv: Command-line arguments passed by absl.app. These are ignored
+            because configuration is taken from FLAGS.
+    """
     del argv  # Unused because the absl flags system is used.
 
     assert os.path.exists(FLAGS.dbfile), f'Missing database file: {FLAGS.dbfile}'
