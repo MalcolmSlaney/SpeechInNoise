@@ -70,45 +70,45 @@ def audio_to_filename(fname, basename=basename):
     return os.path.join(basename, "uploads", fname + ".wav")
    
 
-#################### Audio Prompting and Timing Adjustment ####################
+#################### Audio Priming and Timing Adjustment ####################
 
 def assemble_words(asr_result: dict):
   nested_list = [[w['word'] for w in s['words']] for s in asr_result['segments']]
   return [item for sublist in nested_list for item in sublist]
 
-def filter_words(words: List[dict], prompt_time: float):
+def filter_words(words: List[dict], priming_time: float):
   results = []
   for word in words:
-    if word['start'] < prompt_time:
+    if word['start'] < priming_time:
       continue
-    word['start'] -= prompt_time
-    word['end'] -= prompt_time
+    word['start'] -= priming_time
+    word['end'] -= priming_time
     results.append(word)
   return results
 
-def filter_segment(segment: dict, prompt_time: float):
-  if segment['end'] < prompt_time:
+def filter_segment(segment: dict, priming_time: float):
+  if segment['end'] < priming_time:
     return None
   else:
-    segment['start'] -= prompt_time
-    segment['end'] -= prompt_time
-    segment['words'] = filter_words(segment['words'], prompt_time)
+    segment['start'] -= priming_time
+    segment['end'] -= priming_time
+    segment['words'] = filter_words(segment['words'], priming_time)
     return segment
 
-def remove_prompt_from_results(asr_result: Dict[str, Any], 
-                               prompt_length: float=1, # Seconds
+def remove_prime_from_results(asr_result: Dict[str, Any], 
+                               priming_length: float=1, # Seconds
                                ) -> Dict[str, Any]:
-  """Filter out ASR results that occur during the audio prompt, and adjust 
-  timestamps to be relative to the end of the prompt."""
+  """Filter out ASR results that occur during the audio prime, and adjust 
+  timestamps to be relative to the end of the prime."""
   filtered = copy.deepcopy(asr_result)
   new_segments = []
   for segment in filtered['segments']:
-    new_segment = filter_segment(segment, prompt_length)
+    new_segment = filter_segment(segment, priming_length)
     if new_segment is not None:
       new_segments.append(new_segment)
   filtered['segments'] = new_segments
   filtered['text'] = assemble_words(filtered)
-  filtered['note'] = 'Used English prompt'
+  filtered['note'] = 'Used acoustic prime'
   return filtered
 
 
@@ -204,15 +204,15 @@ def update(con: sqlite3.Connection, rowid: int, res: dict):
         cur.close()
 
 
-def recognize_with_prompt(audio_path: str, 
-                          prompt_path: str,
-                          prompt_length: float,
-                          adjust_timing: bool = True,
-                          debug: bool = False) -> Dict[str, Any]:
-    """Concatenates the prompt audio with the target audio, runs ASR on the 
+def recognize_with_priming(audio_path: str, 
+                           priming_path: str,
+                           priming_length: float,
+                           adjust_timing: bool = True,
+                           debug: bool = False) -> Dict[str, Any]:
+    """Concatenates the priming audio with the target audio, runs ASR on the 
     combined file, and then filters the results to only include words that 
-    occur after the prompt."""
-    combined_path = concatenate_audio_files(prompt_path, audio_path)
+    occur after the priming audio."""
+    combined_path = concatenate_audio_files(priming_path, audio_path)
     combined_result = {}
     try:
         asr_result = worker_asr_engine.recognize(combined_path)
@@ -220,10 +220,10 @@ def recognize_with_prompt(audio_path: str,
           print("ASR result for combined audio:")
           pprint.pprint(asr_result)
         if adjust_timing:
-          adjusted_result = remove_prompt_from_results(
-            asr_result, prompt_length=prompt_length)
+          adjusted_result = remove_prime_from_results(
+            asr_result, priming_length=priming_length)
           if debug:
-            print("Adjusted ASR result after filtering prompt:")
+            print("Adjusted ASR result after filtering prime:")
             pprint.pprint(adjusted_result)
         else:
           adjusted_result = asr_result
@@ -234,7 +234,7 @@ def recognize_with_prompt(audio_path: str,
 
 def process_audio_task(task: Tuple, 
                        project_list: List[str], 
-                       audio_prompt_dict: Dict[str, Tuple[str, float]] = {},
+                       audio_priming_dict: Dict[str, Tuple[str, float]] = {},
                        debug: bool = False,
                        ) -> Tuple[int, Optional[Dict[str, Any]], Optional[str]]:
     """
@@ -246,28 +246,29 @@ def process_audio_task(task: Tuple,
     rowid, fname, project, audio_asr_data, username = task
     test_filename = audio_to_filename(fname)
     try:
-        if project in project_list and username in audio_prompt_dict:
-          prompt_filename, prompt_audio_length = audio_prompt_dict[username]
+        if project in project_list and username in audio_priming_dict:
+          priming_filename, priming_audio_length = audio_priming_dict[username]
           if debug:
             print('\n**********************************************')
-            print('Adding prompt for user', username, 'in project', project, 
-                  'of length', prompt_audio_length, 'seconds')
-          asr_result = recognize_with_prompt(test_filename, 
-                                             prompt_filename, 
-                                             prompt_audio_length, 
+            print('Adding audio prime for user', username, 'in project', project, 
+                  'of length', priming_audio_length, 'seconds')
+          asr_result = recognize_with_priming(test_filename, 
+                                             priming_filename, 
+                                             priming_audio_length, 
                                              debug=debug)
-          asr_result2 = worker_asr_engine.recognize(test_filename)
           if debug:
-            print('ASR result with prompt:')
+            print('ASR result with prime:')
             pprint.pprint(asr_result)
             print('')
-            print('ASR result without prompt:' )
+            # Do it again without the prime just to see the difference
+            asr_result2 = worker_asr_engine.recognize(test_filename)
+            print('ASR result without prime:' )
             pprint.pprint(asr_result2)
             sys.stdout.flush()
         else:
           asr_result = worker_asr_engine.recognize(test_filename)
           if debug:
-            print('No prompt asr result:', asr_result)
+            print('No prime asr result:', asr_result)
         
         return rowid, asr_result, None
     except Exception as e:
@@ -280,7 +281,7 @@ def main(asr_class_name: str,
          db_file: str, 
          single_word_projects: str = '',
          num_workers: int = 1,
-         audio_prompt_dict: Dict[str, Tuple[str, float]] = {},
+         audio_priming_dict: Dict[str, Tuple[str, float]] = {},
          count: int = 0,
          debug: bool = False,
          ):
@@ -305,7 +306,7 @@ def main(asr_class_name: str,
     worker_func = partial(
         process_audio_task,
         project_list=single_word_project_list,
-        audio_prompt_dict=audio_prompt_dict,
+        audio_priming_dict=audio_priming_dict,
         debug=debug
     )
 
@@ -372,7 +373,7 @@ if __name__ == "__main__":
                         help="Which SQLite3 database file to process")
     parser.add_argument("--single_word_projects", 
                         default="cnc,win,nu6",
-                        help="Which projects need language prompt")
+                        help="Which projects need language priming or prompting for single-word tests; provide as a comma-separated list with no spaces")
     parser.add_argument("--language_prompt_file", 
                         default="EnglishPrompt.wav",
                         help="Audio file to prompt recognizer to use English")
@@ -406,16 +407,16 @@ if __name__ == "__main__":
 
     # Get the a dictionary of good audio responses that we can prepend to the 
     # target audio for single-word tests.
-    audio_prompt_dict = get_highest_snr_files_with_duration(args.dbfile,
+    audio_priming_dict = get_highest_snr_files_with_duration(args.dbfile,
                                                             'quick')
     count = 0
-    for username, (prompt_filename, prompt_length) in audio_prompt_dict.items():
-        if prompt_filename is not None:
-            print(f"User '{username}' has a prompt file '{prompt_filename}' of length {prompt_length:.2f} seconds.")
+    for username, (priming_filename, priming_length) in audio_priming_dict.items():
+        if priming_filename is not None:
+            print(f"User '{username}' has a priming file '{priming_filename}' of length {priming_length:.2f} seconds.")
             count += 1
         else:
-            print(f"User '{username}' does not have a valid prompt file.")
-    print(f"Total users with valid prompt files: {count}")
+            print(f"User '{username}' does not have a valid file for priming.")
+    print(f"Total users with valid priming files: {count}")
 
     # Notice we pass the string names here now
     main(args.asr, 
@@ -423,6 +424,6 @@ if __name__ == "__main__":
          args.dbfile,
          args.single_word_projects, 
          args.num_workers,
-         audio_prompt_dict,
+         audio_priming_dict,
          args.count,
          args.debug)
