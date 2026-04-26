@@ -19,10 +19,68 @@ from typing import Any, Dict, List, Optional, Tuple
 from multiprocessing import Pool
 from functools import partial
 
+from absl import app
+from absl import flags
 import asr
 
 default_sample_rate = 22050
 basename = pathlib.Path(__file__).parents[0]
+
+FLAGS = flags.FLAGS
+models = [
+    "tiny.en", "tiny",
+    "base.en", "base",
+    "small.en", "small",
+    "medium.en", "medium",
+    "large"
+]
+
+flags.DEFINE_enum(
+    'model',
+    'medium.en',
+    models,
+    'Which Whisper model size to use; see: https://github.com/openai/whisper#available-models-and-languages'
+)
+flags.DEFINE_string(
+    'dbfile',
+    os.path.join(basename, 'experiments_malcolm.db'),
+    'Which SQLite3 database file to process.'
+)
+flags.DEFINE_string(
+    'single_word_projects',
+    'cnc,win,nu6',
+    'Which projects need language priming or prompting for single-word tests; provide as a comma-separated list with no spaces.'
+)
+flags.DEFINE_string(
+    'language_prompt_file',
+    'EnglishPrompt.wav',
+    'Audio file to prompt recognizer to use English.'
+)
+flags.DEFINE_boolean(
+    'prompted',
+    False,
+    'Use the correct answer as the model prompt; can help accuracy but can also bias results towards correct.'
+)
+flags.DEFINE_boolean(
+    'force',
+    False,
+    'If set, remove any duplicate ASR rows matching the current model parameters before processing.'
+)
+flags.DEFINE_boolean(
+    'debug',
+    False,
+    'Enable verbose debug output during ASR processing.'
+)
+flags.DEFINE_integer(
+    'count',
+    0,
+    'For testing: only process this many rows and then quit.'
+)
+flags.DEFINE_integer(
+    'num_workers',
+    1,
+    'Number of concurrent workers for ASR processing. Running multiple workers will multiply your RAM/VRAM usage.'
+)
 
 #################### Audio Processing Functions ####################
 
@@ -356,58 +414,22 @@ def deduplicate(db_file: str, **kw):
   con.commit()
   con.close()
 
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    models = [
-            "tiny.en", "tiny",
-            "base.en", "base",
-            "small.en", "small",
-            "medium.en", "medium",
-            "large"]
-    parser.add_argument("--model", default="medium.en", choices=models, help=(
-            "which whisper model size to use (default: large); see: "
-            "https://github.com/openai/whisper#available-models-and-languages"))
-    parser.add_argument("--dbfile", 
-                        default=os.path.join(basename, "experiments_malcolm.db"), 
-                        help="Which SQLite3 database file to process")
-    parser.add_argument("--single_word_projects", 
-                        default="cnc,win,nu6",
-                        help="Which projects need language priming or prompting for single-word tests; provide as a comma-separated list with no spaces")
-    parser.add_argument("--language_prompt_file", 
-                        default="EnglishPrompt.wav",
-                        help="Audio file to prompt recognizer to use English")
-    parser.add_argument(
-            "--prompted", dest="asr", default="WhisperASR",
-            action="store_const", const="PromptedWhisperASR", help=(
-                "use the correct answer as the model prompt; can help accuracy "
-                "but can also bias results towards correct"))
-    parser.add_argument("--force", action="store_true")
-    parser.add_argument("--debug", action="store_true")
-    
-    parser.add_argument("--count", type=int, default=0,
-                        help="For testing: only process this many rows and then quit.")
-    parser.add_argument("--num_workers", type=int, default=1,
-                        help="Number of concurrent workers for ASR processing. "
-                             "Warning: Running multiple workers will multiply your RAM/VRAM usage.")
-    
-    args = parser.parse_args()
+def run_main(argv):
+    del argv  # Unused because the absl flags system is used.
 
-    assert os.path.exists(args.dbfile)
-    assert os.path.exists(args.language_prompt_file), f'Missing {args.language_prompt_file}'
+    assert os.path.exists(FLAGS.dbfile), f'Missing database file: {FLAGS.dbfile}'
+    assert os.path.exists(FLAGS.language_prompt_file), f'Missing {FLAGS.language_prompt_file}'
 
-    if args.force:
-        model_type = "default" if args.asr == "WhisperASR" else "prompted"
-        deduplicate(args.dbfile, model_name=args.model, model_type=model_type)
-    
-    if False:
-      filename = get_highest_snr_quicksin_reply(args.dbfile, 'A3S03', 'quick')
-      print(filename)
-      sys.exit(0)
+    if FLAGS.force:
+        model_type = 'default' if not FLAGS.prompted else 'prompted'
+        deduplicate(
+            FLAGS.dbfile,
+            model_name=FLAGS.model,
+            model_type=model_type)
 
     # Get the a dictionary of good audio responses that we can prepend to the 
     # target audio for single-word tests.
-    audio_priming_dict = get_highest_snr_files_with_duration(args.dbfile,
+    audio_priming_dict = get_highest_snr_files_with_duration(FLAGS.dbfile,
                                                             'quick')
     count = 0
     for username, (priming_filename, priming_length) in audio_priming_dict.items():
@@ -418,12 +440,18 @@ if __name__ == "__main__":
             print(f"User '{username}' does not have a valid file for priming.")
     print(f"Total users with valid priming files: {count}")
 
-    # Notice we pass the string names here now
-    main(args.asr, 
-         args.model, 
-         args.dbfile,
-         args.single_word_projects, 
-         args.num_workers,
-         audio_priming_dict,
-         args.count,
-         args.debug)
+    asr_class_name = 'PromptedWhisperASR' if FLAGS.prompted else 'WhisperASR'
+
+    main(
+        asr_class_name,
+        FLAGS.model,
+        FLAGS.dbfile,
+        FLAGS.single_word_projects,
+        FLAGS.num_workers,
+        audio_priming_dict,
+        FLAGS.count,
+        FLAGS.debug)
+
+
+if __name__ == '__main__':
+    app.run(run_main)
