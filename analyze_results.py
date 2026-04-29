@@ -1,6 +1,49 @@
 ## Analyze results from all the online subject data, perform speech 
 ## recognition, and compare to audiologist judgements.
 
+"""
+This a data analysis and reporting tool for the SpeechInNoise experiment that 
+compares automatic speech recognition (ASR) results from Whisper against human 
+audiologist judgments.
+
+Main Purpose
+The program performs the following workflow:
+
+Loads reference data: Reads a homonym list (words with identical pronunciation) 
+from a CSV file to identify equivalent keywords.
+
+Extracts database results: Queries the SQLite database to retrieve audio trial 
+metadata, user information, ASR results, and audiologist annotations from the 
+audio_trials, users, audio_results, audio_asr, and audio_annotations tables.
+
+Normalizes data: Processes raw database results by:
+
+Converting JSON-encoded ASR and annotation data into structured Python objects
+Parsing ASR word recognition results from Whisper output
+Tokenizing the expected answers into word lists
+Mapping homonyms to handle phonetically equivalent words
+Scores ASR performance: For each trial, determines whether the ASR system 
+correctly recognized each keyword by:
+
+Comparing recognized words against ground truth
+Handling homonym sets and hyphenated words
+Tracking word-level match times from Whisper
+Compares human vs. machine: Evaluates agreement between the audiologist's manual
+annotations and the ASR system's results.
+
+Generates analysis outputs:
+
+* CSV file: Exports detailed results for each trial including ASR matches and 
+timing
+* Confusion matrices: Creates per-test-type confusion matrices showing agreement 
+patterns
+* HTML report: Generates an interactive report highlighting discrepancies between 
+ASR and human judgments, with links to audio files
+* Computes accuracy: Calculates per-test accuracy metrics (broken down by test 
+type like QuickSIN, AzBio, CNC, etc.)
+
+
+"""
 from absl import app, flags
 import csv
 from dataclasses import dataclass
@@ -390,6 +433,7 @@ def save_results_as_csv(all_results: List[QS_result],
               result.user_time, result.user_info_id, result.user_info_key,
               result.user_info_value, result.user_info_time, result.asr_id,
               json.dumps(result.asr_results), # Convert dict to JSON string
+              result.annotation_ref, # Was missing before!
               json.dumps(result.annotation_matches), # Convert list to JSON string
               ','.join(result.asr_words) if isinstance(result.asr_words, list) else result.asr_words,
               ','.join([str(m) for m in result.asr_matches]) if isinstance(result.asr_matches, list) else result.asr_matches,
