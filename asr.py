@@ -11,8 +11,12 @@ from typing import Any, Union
 
 # Documentation seems to be at:
 #   https://whisper-api.com/docs/transcription-options/#setting-the-language
-import whisper, subprocess
+
+import subprocess
+import torch
+import whisper
 from whisper.normalizers import EnglishTextNormalizer
+from whisper.decoding import LogitsProcessor
 
 assert not subprocess.run(
     ["which", "ffmpeg"], stdout=subprocess.DEVNULL).returncode
@@ -101,4 +105,49 @@ class PromptedWhisperASR:
         return {**res, **self.meta}
 
 
-WhisperASREngine = Union[WhisperASR, PromptedWhisperASR]
+class OOVLogitsProcessor(LogitsProcessor):
+    def __init__(self, allowed_token_ids, penalty):
+        self.allowed_token_ids = allowed_token_ids
+        self.penalty = penalty
+
+    def apply(self, logits, tokens):
+        # Create a mask for all vocabulary tokens
+        mask = torch.ones_like(logits, dtype=torch.bool)
+        
+        # Unmask the tokens we want to allow (so they don't get penalized)
+        mask[:, self.allowed_token_ids] = False
+        
+        # Apply the penalty to everything else
+        logits[mask] -= self.penalty
+        return logits
+
+class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
+    def recognize(self, audio_path, initial_prompt='', valid_words=None, oov_penalty=10.0):
+        options = {"initial_prompt": initial_prompt}
+        
+        if valid_words:
+            # Tokenize the valid words using the whisper tokenizer
+            tokenizer = whisper.tokenizer.get_tokenizer(
+                self.model.is_multilingual, language="en"
+            )
+            
+            allowed_token_ids = set()
+            for word in valid_words:
+                # Whisper tokens often include a leading space
+                tokens = tokenizer.encode(" " + word.strip())
+                allowed_token_ids.update(tokens)
+                
+            # Add essential structural tokens (End of text, no speech, etc.)
+            allowed_token_ids.update([tokenizer.eot, tokenizer.sot, tokenizer.no_speech])
+            
+            # Create our custom processor
+            logits_processor = OOVLogitsProcessor(
+                allowed_token_ids=list(allowed_token_ids), 
+                penalty=oov_penalty
+            )
+            options["logits_processor"] = [logits_processor]
+
+        # Transcribe using the custom logits processor
+        return self.model.transcribe(audio_path, **options)
+
+WhisperASREngine = Union[WhisperASR, PromptedWhisperASR, ForcedWhisperASR]
