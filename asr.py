@@ -146,8 +146,8 @@ class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
                 allowed_token_ids.update(tokenizer.encode(" " + word.strip()))
                 allowed_token_ids.update(tokenizer.encode(word.strip()))
                 
-            # Add essential structural tokens (End of text, Start of text, etc.)
-            for token in [tokenizer.eot, tokenizer.sot, tokenizer.no_speech]:
+            # Add essential structural tokens (End of text, Start of text, no speech etc.)
+            for token in [tokenizer.eot, tokenizer.sot, getattr(tokenizer, 'no_speech', None)]:
                 if token is not None:
                     allowed_token_ids.add(token)
             
@@ -160,22 +160,25 @@ class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
                 timestamp_begin=timestamp_begin
             )
             
-            # Temporarily inject the filter into Whisper's DecodingTask
-            original_get_logit_filters = DecodingTask.get_logit_filters
+            # Temporarily inject the filter into Whisper's DecodingTask __init__
+            original_init = DecodingTask.__init__
             
-            def hooked_get_logit_filters(task_self):
-                filters = original_get_logit_filters(task_self)
-                filters.append(custom_filter)
-                return filters
+            def hooked_init(task_self, task_model, task_options):
+                # Call the original __init__ which sets up task_self.logit_filters
+                original_init(task_self, task_model, task_options)
                 
-            DecodingTask.get_logit_filters = hooked_get_logit_filters
+                # Append our custom filter to the pipeline
+                if hasattr(task_self, 'logit_filters'):
+                    task_self.logit_filters.append(custom_filter)
+                
+            DecodingTask.__init__ = hooked_init
             
             try:
                 # Transcribe with the hooked filter
                 result = self.model.transcribe(audio_path, **options)
             finally:
                 # Always restore the original function so we don't permanently break it
-                DecodingTask.get_logit_filters = original_get_logit_filters
+                DecodingTask.__init__ = original_init
                 
             return result
             
