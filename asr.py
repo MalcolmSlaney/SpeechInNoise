@@ -7,7 +7,7 @@ transcription with an optional initial prompt. Each engine exposes a
 engine metadata.
 """
 
-from typing import Any, Union
+from typing import Any, List, Union
 
 # Documentation seems to be at:
 #   https://whisper-api.com/docs/transcription-options/#setting-the-language
@@ -44,7 +44,9 @@ class WhisperASR:
     def recognize(self,
                   audio_path: str,
                   language: str = 'en',
-                  initial_prompt: str = '') -> dict[str, Any]:
+                  initial_prompt: str = '',
+                  valid_words: List[str] = None # Ignored for this class
+                  ) -> dict[str, Any]:
         """Transcribe an audio file using Whisper.
 
         Args:
@@ -85,7 +87,9 @@ class PromptedWhisperASR:
     def recognize(self,
                   audio_path: str,
                   language: str = 'en',
-                  initial_prompt: str = '') -> dict[str, Any]:
+                  initial_prompt: str = '',
+                  valid_words: List[str] = None # Ignored for this class
+                  ) -> dict[str, Any]:
         """Transcribe an audio file using Whisper with an initial prompt.
 
         Args:
