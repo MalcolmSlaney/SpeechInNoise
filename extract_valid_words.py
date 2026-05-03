@@ -25,7 +25,7 @@ from absl import flags
 FLAGS = flags.FLAGS
 flags.DEFINE_string('dbfile', 'experiments_malcolm.db',
                     'Path to the SQLite database file.')
-flags.DEFINE_string('output', '',
+flags.DEFINE_string('output', 'valid_words.json',
                     'Optional output path for a JSON file containing the project->words dictionary. If omitted, writes JSON to stdout.')
 flags.DEFINE_boolean('lowercase', True,
                      'Lowercase all extracted words.')
