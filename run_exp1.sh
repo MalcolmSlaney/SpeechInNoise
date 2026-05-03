@@ -30,7 +30,7 @@ for prompt in noprompt prompt; do
     --num_workers 6 
 done
 
-
+# Now that we have the ASR results, run the analysis and save the results.
 for prompt in noprompt prompt; do
   dir=exp1/exp1_${prompt}_results
   mkdir -p $dir
