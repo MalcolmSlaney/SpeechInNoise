@@ -16,7 +16,8 @@ import subprocess
 import torch
 import whisper
 from whisper.normalizers import EnglishTextNormalizer
-from whisper.decoding import LogitsProcessor
+from whisper.decoding import LogitFilter, DecodingTask
+
 
 assert not subprocess.run(
     ["which", "ffmpeg"], stdout=subprocess.DEVNULL).returncode
@@ -109,21 +110,25 @@ class PromptedWhisperASR:
         return {**res, **self.meta}
 
 
-class OOVLogitsProcessor(LogitsProcessor):
-    def __init__(self, allowed_token_ids, penalty):
+class OOVLogitFilter(LogitFilter):
+    def __init__(self, allowed_token_ids, penalty, timestamp_begin=None):
         self.allowed_token_ids = allowed_token_ids
         self.penalty = penalty
+        self.timestamp_begin = timestamp_begin
 
-    def apply(self, logits, tokens):
-        # Create a mask for all vocabulary tokens
-        mask = torch.ones_like(logits, dtype=torch.bool)
+    def apply(self, logits: torch.Tensor, tokens: torch.Tensor):
+        # logits shape: (batch_size, vocab_size)
+        mask = torch.ones_like(logits[0], dtype=torch.bool)
         
-        # Unmask the tokens we want to allow (so they don't get penalized)
-        mask[:, self.allowed_token_ids] = False
+        # Unmask the allowed vocabulary tokens
+        mask[self.allowed_token_ids] = False
         
+        # Unmask timestamp tokens so we don't break Whisper's timing/segmentation
+        if self.timestamp_begin is not None and self.timestamp_begin < logits.shape[-1]:
+            mask[self.timestamp_begin:] = False
+            
         # Apply the penalty to everything else
-        logits[mask] -= self.penalty
-        return logits
+        logits[:, mask] -= self.penalty
 
 class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
     def recognize(self, audio_path, initial_prompt='', valid_words=None, oov_penalty=10.0):
@@ -137,21 +142,42 @@ class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
             
             allowed_token_ids = set()
             for word in valid_words:
-                # Whisper tokens often include a leading space
-                tokens = tokenizer.encode(" " + word.strip())
-                allowed_token_ids.update(tokens)
+                # Whisper tokens often include a leading space; it's safest to allow both
+                allowed_token_ids.update(tokenizer.encode(" " + word.strip()))
+                allowed_token_ids.update(tokenizer.encode(word.strip()))
                 
-            # Add essential structural tokens (End of text, no speech, etc.)
-            allowed_token_ids.update([tokenizer.eot, tokenizer.sot, tokenizer.no_speech])
+            # Add essential structural tokens (End of text, Start of text, etc.)
+            for token in [tokenizer.eot, tokenizer.sot, tokenizer.no_speech]:
+                if token is not None:
+                    allowed_token_ids.add(token)
             
-            # Create our custom processor
-            logits_processor = OOVLogitsProcessor(
+            timestamp_begin = getattr(tokenizer, 'timestamp_begin', None)
+            
+            # Create our custom filter
+            custom_filter = OOVLogitFilter(
                 allowed_token_ids=list(allowed_token_ids), 
-                penalty=oov_penalty
+                penalty=oov_penalty,
+                timestamp_begin=timestamp_begin
             )
-            options["logits_processor"] = [logits_processor]
-
-        # Transcribe using the custom logits processor
+            
+            # Temporarily inject the filter into Whisper's DecodingTask
+            original_get_logit_filters = DecodingTask.get_logit_filters
+            
+            def hooked_get_logit_filters(task_self):
+                filters = original_get_logit_filters(task_self)
+                filters.append(custom_filter)
+                return filters
+                
+            DecodingTask.get_logit_filters = hooked_get_logit_filters
+            
+            try:
+                # Transcribe with the hooked filter
+                result = self.model.transcribe(audio_path, **options)
+            finally:
+                # Always restore the original function so we don't permanently break it
+                DecodingTask.get_logit_filters = original_get_logit_filters
+                
+            return result
+            
+        # Fallback if no valid_words were passed
         return self.model.transcribe(audio_path, **options)
-
-WhisperASREngine = Union[WhisperASR, PromptedWhisperASR, ForcedWhisperASR]
