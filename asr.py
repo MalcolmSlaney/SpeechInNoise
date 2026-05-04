@@ -180,8 +180,8 @@ class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
             try:
                 # Transcribe with the hooked filter
                 result = self.model.transcribe(audio_path, **options)
-                print(f"Applied OOV filter with {len(allowed_token_ids)} allowed tokens and penalty {oov_penalty}")
-                print(f' Transcribe returned: {result}')
+                # print(f"Applied OOV filter with {len(allowed_token_ids)} allowed tokens and penalty {oov_penalty}")
+                # print(f' Transcribe returned: {result}')
             finally:
                 # Always restore the original function so we don't permanently break it
                 DecodingTask.__init__ = original_init
