@@ -365,7 +365,8 @@ def score_matches(a_result: QS_result, debug: bool = False):
 
 
 def convert_sql_to_results(all_query_results,
-                           all_ground_truth: List[set[str]]) -> List[QS_result]:
+                           all_ground_truth: List[set[str]], 
+                           debug_count: int = 0) -> List[QS_result]:
   """Convert the SQL database into a list of qs_result objects.
   """
   debug_test_count = {}
@@ -395,8 +396,8 @@ def convert_sql_to_results(all_query_results,
       # if a_result.user_info_value != 'pilot':
       #   continue
       score_asr_system(a_result, all_ground_truth, 
-                       debug_test_count[test_name] < 3)
-      score_matches(a_result, debug_test_count[test_name] < 3)
+                       debug_test_count[test_name] < debug_count)
+      score_matches(a_result, debug_test_count[test_name] < debug_count)
     all_results.append(a_result)
   return all_results
 
@@ -661,6 +662,8 @@ flags.DEFINE_bool('only_foreign', False,
                   'Whether to only show foreign recognizer results in discrepancies html')
 flags.DEFINE_bool('only_discrepancies', True, 
                   'Whether to only show human/machine discrepancies the final html')
+flags.DEFINE_integer('debug_count', 0, 
+                     'Number of examples to print debug info for when scoring ASR system.')
 # flags.DEFINE_boolean('debug', False, 'Enable debug mode.')
 
 def main(argv):
@@ -674,7 +677,8 @@ def main(argv):
   # a list of QS_result objects, and save to a CSV file for later analysis.
   all_query_results = get_all_sql_data(FLAGS.dbfile)
   all_results = convert_sql_to_results(all_query_results,
-                                       all_ground_truth)
+                                       all_ground_truth, 
+                                       debug_count=FLAGS.debug_count)
   csv_file = save_results_as_csv(all_results, 'quicksin_results.csv')
 
   # Summarize the test results
