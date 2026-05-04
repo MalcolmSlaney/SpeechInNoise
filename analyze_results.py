@@ -397,8 +397,8 @@ def convert_sql_to_results(all_query_results,
       # if a_result.user_info_value != 'pilot':
       #   continue
       score_asr_system(a_result, all_ground_truth, test_name=test_name,
-                       debug_test_count[test_name] < debug_count)
-      score_matches(a_result, debug_test_count[test_name] < debug_count)
+                       debug=debug_test_count[test_name] < debug_count)
+      score_matches(a_result, debug=debug_test_count[test_name] < debug_count)
     all_results.append(a_result)
   return all_results
 
