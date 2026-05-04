@@ -317,6 +317,7 @@ def asr_match(desired_word_set: Union[set[str], str],
 def score_asr_system(a_result: QS_result,
                      all_ground_truth: Dict[Tuple[str, int, int], 
                                             list[set[str]]],
+                     test_name: str = 'unknown', # Optional for debugging
                      debug: bool = False):
   # Score the ASR results, creating a list of true/false
   # ground truth is a list of sets of words, one set per keyword
@@ -347,7 +348,7 @@ def score_asr_system(a_result: QS_result,
     word_matches = [False] * len(ground_truth)
     match_times = [np.nan] * len(ground_truth)
   if debug:
-    print(f'Want these words: {ground_truth}')
+    print(f'Want these words ({test_name}): {ground_truth}')
     print(f'   in ASR results: {a_result.asr_words}')
     print(f'   results: {word_matches} at {match_times}s')
   a_result.asr_matches = word_matches
@@ -395,7 +396,7 @@ def convert_sql_to_results(all_query_results,
         continue
       # if a_result.user_info_value != 'pilot':
       #   continue
-      score_asr_system(a_result, all_ground_truth, 
+      score_asr_system(a_result, all_ground_truth, test_name=test_name,
                        debug_test_count[test_name] < debug_count)
       score_matches(a_result, debug_test_count[test_name] < debug_count)
     all_results.append(a_result)

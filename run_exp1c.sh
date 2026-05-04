@@ -13,6 +13,6 @@ python offline_asr.py --dbfile $dbfile --single_word_projects="$project_list" \
 for prompt in forced; do
   dir=exp1/exp1_${prompt}_results
   mkdir -p $dir
-  python analyze_results.py --dbfile experiments_exp1_${prompt}.db > $dir/analysis.txt
+  python analyze_results.py --dbfile experiments_exp1_${prompt}.db --debug_count=100000 > $dir/analysis.txt
   mv asr_audiology_discrepancies.html confusion_matrices.png quicksin_results.csv $dir/
 done
