@@ -133,6 +133,7 @@ class OOVLogitFilter(LogitFilter):
 class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
     def recognize(self, audio_path, initial_prompt='', valid_words=None, oov_penalty=10.0):
         options = {"initial_prompt": initial_prompt, 
+                   "word_timestamps": True,
                    "fp16": False}
         
         if valid_words:
