@@ -136,3 +136,32 @@ class WinDB(WinSpec, AudioDB):
 class WinBP(WinSpec, AudioOutputBP):
     def __init__(self, db, name="win", url_prefix="/win"):
         super().__init__(db, name, url_prefix)
+
+# Spanish
+# AzBio in Spanish with 10dB(?) SNR
+class AzBioSpanishSpec(AudioSpec):
+    audio_files = relpath("metadata/azbio_spanish_transcript.csv")
+    project_key = "azbio_spanish"
+
+class AzBioSpanishDB(AzBioSpanishSpec, AudioDB):
+    def db_init_hook(self):
+        super().db_init_hook()
+        self.parse_csv(__class__)
+
+class AzBioSpanishBP(AzBioSpanishSpec, AudioOutputBP):
+    def __init__(self, db, name="azbio_spanish", url_prefix="/azbio_spanish"):
+        super().__init__(db, name, url_prefix)
+
+# AzBio in Spanish in Quiet
+class AzBioSpanishQuietSpec(AudioSpec):
+    audio_files = relpath("metadata/azbio_spanish_quiet_transcript.csv")
+    project_key = "azbio_spanish_quiet"
+
+class AzBioSpanishQuietDB(AzBioSpanishQuietSpec, AudioDB):
+    def db_init_hook(self):
+        super().db_init_hook()
+        self.parse_csv(__class__)
+
+class AzBioSpanishQuietBP(AzBioSpanishQuietSpec, AudioOutputBP):
+    def __init__(self, db, name="azbio_spanish_quiet", url_prefix="/azbio_spanish_quiet"):
+        super().__init__(db, name, url_prefix)

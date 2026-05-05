@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script type="text/javascript" src="audio.js"></script>
+    <script type="text/javascript" src="record.js"></script>
+    <script type="text/javascript">
+      let audio = new AnnotatedAudio("azbio_spanish_quiet");
+      let recorder = new AnnotatedRecorder(audio);
+    </script>
+    <link rel="stylesheet" href="vars.css">
+    <link rel="stylesheet" href="audio.css">
+    <link rel="stylesheet" href="playback.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto&family=Source+Sans+3&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200">
+  </head>
+  <body>
+    <div id="content">
+      <div id="header">
+        <div id="org"><span>Stanford</span></div>
+        <div id="project">AzBio Spanish Quiet</div>
+        <div id="username"><span></span></div>
+      </div>
+      <form id="interactive" action="javascript:void(0)"
+          onsubmit="return false">
+        <div id="audio-controls">
+          <div class="center-wrapper active" id="playback-wrapper">
+            <div id="audio-description" class="offset-description">
+              Play Sentence
+            </div>
+            <div>
+              <button id="playback" class="playback-interface pause"
+                  type="button"></button>
+            </div>
+            <div class="spacer">
+              <audio id="playing" controlslist="nodownload noplaybackrate">
+              </audio>
+            </div>
+          </div>
+          <div class="center-wrapper" id="recording-wrapper">
+            <div id="recording-description" class="offset-description">
+              Speak the words you heard
+            </div>
+            <div id="sound-wrapper">
+              <span class="material-symbols-outlined"></span>
+              <div class="sound-bar first"></div>
+              <div class="sound-bar second"></div>
+              <div class="sound-bar third"></div>
+            </div>
+            <div class="spacer"></div>
+          </div>
+        </div>
+        <div id="aux-data">
+          <div id="result-options">
+            <button class="base-button" id="result-all" type="button">
+              All
+            </button>
+            <button class="base-button" id="result-none" type="button">
+              None
+            </button>
+          </div>
+        </div>
+      </form>
+      <div id="next-wrapper">
+        <div class="next-outer-spacer"></div>
+        <button id="overlay-results" class="base-button hidden" type="button">
+          Results
+        </button>
+        <div class="next-mid-spacer"></div>
+        <button id="next-audio" class="base-button" disabled type="button">
+          <span>Next Audio</span>
+          <span class="material-symbols-outlined">arrow_right_alt</span>
+        </button>
+        <div class="next-outer-spacer"></div>
+      </div>
+      <div id="footer">
+        <div id="exceptions-view"></div>
+        <div id="playback-debug"></div>
+      </div>
+    </div>
+    <div id="results-overlay">
+      <div>
+        <img />
+        <div id="results-clickable"></div>
+      </div>
+    </div>
+  </body>
+</html>
+
