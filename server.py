@@ -1,7 +1,7 @@
 from api import APIBlueprint
 from api_review import ReviewAPIBlueprint
 from werkzeug.middleware.proxy_fix import ProxyFix
-from flask import Flask, Response, send_from_directory
+from flask import Flask, Response, redirect, send_from_directory
 from storage import relpath
 import os
 
