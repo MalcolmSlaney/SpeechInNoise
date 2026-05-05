@@ -16,3 +16,4 @@ for prompt in forced; do
   mkdir -p $dir
   python analyze_results.py --dbfile experiments_exp1_${prompt}.db --debug_count=100000 > $dir/analysis.txt
   mv asr_audiology_discrepancies.html confusion_matrices.png quicksin_results.csv $dir/
+done

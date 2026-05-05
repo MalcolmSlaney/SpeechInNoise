@@ -103,6 +103,11 @@ flags.DEFINE_string(
     'valid_words.json',
     'Path to a JSON file containing the project->valid words dictionary output by extract_valid_words.py.'
 )
+flags.DEFINE_list(
+  'target_projects',
+  'azbio,azbio_quiet,cnc,qs3,quick,win',
+  'Which projects need language priming or prompting for single-word tests; provide as a comma-separated list with no spaces.'
+)
 
 #################### Audio Processing Functions ####################
 
@@ -357,24 +362,42 @@ def init_worker(asr_class_name: str, model_name: str):
     asr_class = getattr(asr, asr_class_name)
     worker_asr_engine = asr_class(model_name)
 
-def get_audio_queue(con: sqlite3.Connection):
+def get_audio_queue(
+      con: sqlite3.Connection, 
+      target_projects: List[str] = ['cnc', 'win', 'nu6']) -> List[Tuple]:
     """Return audio trials that still need ASR processing.
 
     Args:
         con: An open SQLite connection.
+        target_projects: A list of project names to filter the audio trials by.
 
     Returns:
-        A list of pending audio_result rows that have no ASR data.
+        A list of pending audio_result rows that have no ASR data. Each tuple
+        contains the audio_results.id, reply_filename, project, data, and 
+        users.username for a trial.
     """
-    cur = con.execute(
-      "SELECT audio_results.id, reply_filename, project, data, users.username "
-      "FROM audio_results "
-      "LEFT JOIN audio_trials ON audio_results.trial = audio_trials.id "
-      "LEFT JOIN audio_asr ON audio_results.id = audio_asr.ref "
-      "LEFT JOIN users ON audio_results.subject = users.id "
-      "WHERE audio_asr.ref IS NULL "    # This catches rows that DON'T EXIST in audio_asr
-      "   OR audio_asr.data IS NULL "   # This catches rows that exist but are NULL
-      "   OR audio_asr.data = ''")      # This catches rows that exist but are empty
+    # The list of projects you want to filter by
+    target_projects = ['projectA', 'projectB', 'projectC']
+
+    # Create a string of placeholders (?, ?, ?) matching the length of your list
+    placeholders = ', '.join(['?'] * len(target_projects))
+
+    # Construct the query
+    query = (
+        "SELECT audio_results.id, reply_filename, project, data, users.username "
+        "FROM audio_results "
+        "LEFT JOIN audio_trials ON audio_results.trial = audio_trials.id "
+        "LEFT JOIN audio_asr ON audio_results.id = audio_asr.ref "
+        "LEFT JOIN users ON audio_results.subject = users.id "
+        "WHERE (audio_asr.ref IS NULL "      # Added opening parenthesis
+        "   OR audio_asr.data IS NULL "
+        "   OR audio_asr.data = '') "        # Added closing parenthesis
+        f"  AND audio_trials.project IN ({placeholders})"
+    )
+
+    # Execute the query, passing the project list as the parameters
+    cur = con.execute(query, target_projects)
+
     q = cur.fetchall()
     cur.close()
     print(f'Need to perform ASR on {len(q)} trials.')
@@ -448,7 +471,7 @@ def recognize_with_priming(audio_path: str,
 
 
 def process_audio_task(task: Tuple, 
-                       project_list: List[str], 
+                       single_project_list: List[str], 
                        audio_priming_dict: Dict[str, Tuple[str, float]] = {},
                        prompt_map: Dict[str, str] = {},
                        word_map: Dict[str, List[str]] = {},
@@ -477,7 +500,7 @@ def process_audio_task(task: Tuple,
     test_filename = audio_to_filename(fname)
 
     initial_prompt = ''
-    if project in project_list and prompt_map and project in prompt_map:
+    if project in single_project_list and prompt_map and project in prompt_map:
         if debug:
             print(f'Using prompt for project {project}: {prompt_map[project]}')
         initial_prompt = prompt_map[project]
@@ -490,7 +513,7 @@ def process_audio_task(task: Tuple,
         asr_kwargs['oov_penalty'] = FLAGS.oov_penalty
 
     try:
-        if project in project_list and username in audio_priming_dict:
+        if project in single_project_list and username in audio_priming_dict:
           priming_filename, priming_audio_length = audio_priming_dict[username]
           if debug:
             print('\n**********************************************')
@@ -536,6 +559,7 @@ def main(asr_class_name: str,
          audio_priming_dict: Dict[str, Tuple[str, float]] = {},
          prompt_map: Dict[str, str] = {},
          word_map: Dict[str, List[str]] = {},
+         target_projects: List[str] = ['cnc', 'win', 'nu6'],
          count: int = 0,
          debug: bool = False,
          ):
@@ -550,6 +574,7 @@ def main(asr_class_name: str,
         audio_priming_dict: Mapping of username to priming audio path and duration.
         prompt_map: Mapping of project names to initial prompt strings.
         word_map: Mapping of project names to lists of valid words.
+        target_projects: List of project names to include in the ASR processing.
         count: Optional limit on the number of tasks to process.
         debug: If True, enable verbose debug output.
     """
@@ -558,7 +583,7 @@ def main(asr_class_name: str,
     
     # Fetch all pending tasks in the main process
     with sqlite3.connect(db_file) as con:
-        tasks = get_audio_queue(con)
+        tasks = get_audio_queue(con, target_projects=target_projects)
 
     if not tasks:
         print("No tasks found.")
@@ -572,7 +597,7 @@ def main(asr_class_name: str,
     # Bind the static arguments to our worker function
     worker_func = partial(
         process_audio_task,
-        project_list=single_word_project_list,
+        single_project_list=single_word_project_list,
         audio_priming_dict=audio_priming_dict,
         prompt_map=prompt_map,
         word_map=word_map,
@@ -630,6 +655,53 @@ def deduplicate(db_file: str, **kw):
   con.commit()
   con.close()
 
+def get_valid_projects(db_path: str) -> list[str]:
+    """
+    Connects to the SQLite database and returns a list of unique project names
+    from the audio_trials table.
+    
+    Args:
+        db_path (str): The file path to the SQLite database.
+        
+    Returns:
+        list[str]: A list containing the unique project names.
+    """
+    # Initialize an empty list to handle potential connection failures gracefully
+    projects = []
+    con = None
+    
+    try:
+        # Connect to the SQLite database
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
+        
+        # Query to get unique project names. 
+        # IS NOT NULL and != '' ensures we don't grab empty records.
+        query = """
+            SELECT DISTINCT project 
+            FROM audio_trials 
+            WHERE project IS NOT NULL AND project != ''
+        """
+        
+        cur.execute(query)
+        
+        # fetchall() returns a list of tuples (e.g., [('ProjectA',), ('ProjectB',)])
+        results = cur.fetchall()
+        
+        # Use a list comprehension to extract the first element from each tuple
+        projects = [row[0] for row in results]
+        
+    except sqlite3.Error as e:
+        print(f"An error occurred while accessing the database: {e}")
+        
+    finally:
+        # Always ensure the connection is closed, even if an error occurs
+        if con:
+            con.close()
+            
+    return projects
+
+
 def run_main(argv):
     """Parse absl flags and run the offline ASR processing pipeline.
 
@@ -641,6 +713,11 @@ def run_main(argv):
 
     assert os.path.exists(FLAGS.dbfile), f'Missing database file: {FLAGS.dbfile}'
     assert os.path.exists(FLAGS.language_prompt_file), f'Missing {FLAGS.language_prompt_file}'
+
+    valid_projects = get_valid_projects(FLAGS.dbfile)
+    print(f'Found {len(valid_projects)} valid projects in the database: {valid_projects}')
+    for project in FLAGS.target_projects:
+        assert project in valid_projects, f'Target project "{project}" not found in database projects.'
 
     if FLAGS.force:
         if FLAGS.use_forced:
@@ -701,6 +778,7 @@ def run_main(argv):
         audio_priming_dict=audio_priming_dict,
         prompt_map=project_prompts,
         word_map=project_word_map,
+        target_projects=FLAGS.single_word_projects.split(','),
         count=FLAGS.count,
         debug=FLAGS.debug)
 
