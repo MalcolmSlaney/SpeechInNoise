@@ -134,6 +134,10 @@ def set_username(db):
     session.clear()
     session["user"], session["username"] = uid, name
     session["meta"] = search
+    project_arg = request.args.get("project", "null")
+    effective_project = (
+        APIBlueprint.default_project
+        if project_arg == "null" else project_arg)
     requested = request.args.get("list", "null")
     if requested != "null":
         if "-" in requested:
@@ -148,7 +152,11 @@ def set_username(db):
             lang, trial_number = requested, None
         session["requested"] = json.dumps([lang, trial_number])
     else:
-        session["requested"] = json.dumps(['en', None])
+        # appropriate language depending on project
+        default_lang = (
+            "sp" if effective_project in (
+                "azbio_spanish", "azbio_spanish_quiet") else "en")
+        session["requested"] = json.dumps([default_lang, None])
     return json.dumps(APIBlueprint.default_project)
 
 def authorized(db):
