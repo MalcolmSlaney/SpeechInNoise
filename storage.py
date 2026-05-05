@@ -16,10 +16,13 @@ class Database:
                 with app.open_resource(schema, mode='r') as f:
                     db.cursor().executescript(f.read())
                 db.commit()
-                self.db_init_hook()
 
         self.app = app
         app.teardown_appcontext(lambda e: self.close())
+
+        # Update database with any changes to metadata CSV files
+        with app.app_context():
+            self.db_init_hook()
 
     # returns a database connection
     def get(self):
