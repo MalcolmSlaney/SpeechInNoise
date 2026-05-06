@@ -376,9 +376,6 @@ def get_audio_queue(
         contains the audio_results.id, reply_filename, project, data, and 
         users.username for a trial.
     """
-    # The list of projects you want to filter by
-    target_projects = ['projectA', 'projectB', 'projectC']
-
     # Create a string of placeholders (?, ?, ?) matching the length of your list
     placeholders = ', '.join(['?'] * len(target_projects))
 
@@ -396,6 +393,7 @@ def get_audio_queue(
     )
 
     # Execute the query, passing the project list as the parameters
+    print('Executing', query, 'with projects:', target_projects)
     cur = con.execute(query, target_projects)
 
     q = cur.fetchall()
@@ -715,9 +713,8 @@ def run_main(argv):
     assert os.path.exists(FLAGS.language_prompt_file), f'Missing {FLAGS.language_prompt_file}'
 
     valid_projects = get_valid_projects(FLAGS.dbfile)
-    print(f'Found {len(valid_projects)} valid projects in the database: {valid_projects}')
     for project in FLAGS.target_projects:
-        assert project in valid_projects, f'Target project "{project}" not found in database projects.'
+        assert project in valid_projects, f'Target project "{project}" not found in database projects: {valid_projects}'
 
     if FLAGS.force:
         if FLAGS.use_forced:
@@ -778,7 +775,7 @@ def run_main(argv):
         audio_priming_dict=audio_priming_dict,
         prompt_map=project_prompts,
         word_map=project_word_map,
-        target_projects=FLAGS.single_word_projects.split(','),
+        target_projects=FLAGS.target_projects,
         count=FLAGS.count,
         debug=FLAGS.debug)
 
