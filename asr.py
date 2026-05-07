@@ -131,7 +131,9 @@ class OOVLogitFilter(LogitFilter):
         logits[:, mask] -= self.penalty
 
 class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
-    def recognize(self, audio_path, initial_prompt='', valid_words=None, oov_penalty=10.0):
+    def recognize(self, audio_path, initial_prompt='', 
+                  valid_words=None, oov_penalty=10.0,
+                  language='en') -> dict[str, Any]:
         options = {"initial_prompt": initial_prompt, 
                    "word_timestamps": True,
                    "fp16": False}
@@ -139,7 +141,7 @@ class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
         if valid_words:
             # Tokenize the valid words using the whisper tokenizer
             tokenizer = whisper.tokenizer.get_tokenizer(
-                self.model.is_multilingual, language="en"
+                self.model.is_multilingual, language=language
             )
             
             allowed_token_ids = set()

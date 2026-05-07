@@ -26,7 +26,6 @@ from absl import flags
 import asr
 
 default_sample_rate = 22050
-basename = pathlib.Path(__file__).parents[0]
 
 FLAGS = flags.FLAGS
 models = [
@@ -37,6 +36,16 @@ models = [
     "large"
 ]
 
+flags.DEFINE_string(
+  'audiodir', 
+  'uploads',
+  'Base directory for the audio files in the repository.'
+)
+flags.DEFINE_string(
+  'language',
+  'en',
+  'Language code to use for transcription.'
+)
 flags.DEFINE_enum(
     'model',
     'medium.en',
@@ -45,7 +54,7 @@ flags.DEFINE_enum(
 )
 flags.DEFINE_string(
     'dbfile',
-    os.path.join(basename, 'experiments_malcolm.db'),
+    'experiments_malcolm.db',
     'Which SQLite3 database file to process.'
 )
 flags.DEFINE_string(
@@ -161,18 +170,18 @@ def concatenate_audio_files(input_file1: str, input_file2: str) -> str:
 
   return temp_output_filename
 
-def audio_to_filename(fname, basename=basename):
+def audio_to_filename(fname:str, audiodir:str = '.') -> str:
     """Convert a reply filename from the database into a local WAV path.
 
     Args:
         fname: The reply filename stored in the database.
-        basename: The base directory of the repository.
+        audiodir: The base directory of the uploaded audio files.
 
     Returns:
         The full path to the WAV file in the uploads directory.
     """
 
-    return os.path.join(basename, "uploads", fname + ".wav")
+    return os.path.join(audiodir, fname + ".wav")
    
 
 #################### Audio Priming and Timing Adjustment ####################
@@ -251,9 +260,10 @@ def remove_prime_from_results(asr_result: Dict[str, Any],
   return filtered
 
 
-def get_highest_snr_files_with_duration(db_file: str, 
-                                        project_name: str = 'quick',
-                                        ) -> Dict[str, Tuple[str, float]]:
+def get_highest_snr_files_with_duration(
+      db_file: str, 
+      project_name: str = 'quick',
+      audiodir: str = '.') -> Dict[str, Tuple[str, float]]:
     """Find the highest SNR response file for each user for a project.
 
     Args:
@@ -284,7 +294,7 @@ def get_highest_snr_files_with_duration(db_file: str,
         for username, filename in results:
             if filename:
                 # 1. Convert to full pathname
-                full_path = audio_to_filename(filename)
+                full_path = audio_to_filename(filename, audiodir)
                 
                 # 2. Calculate the length in seconds
                 duration = get_wav_duration_seconds(full_path)
@@ -430,6 +440,7 @@ def recognize_with_priming(audio_path: str,
                            priming_length: float,
                            adjust_timing: bool = True,
                            initial_prompt: str = '',
+                           language: str = 'en',
                            debug: bool = False,
                            **kwargs) -> Dict[str, Any]:
     """Run ASR on combined priming and target audio, then discard the prime.
@@ -451,6 +462,7 @@ def recognize_with_priming(audio_path: str,
     try:
         asr_result = worker_asr_engine.recognize(combined_path, 
                                                  initial_prompt=initial_prompt,
+                                                 language=language,
                                                  **kwargs)
         if debug:
           print("ASR result for combined audio:")
@@ -470,9 +482,11 @@ def recognize_with_priming(audio_path: str,
 
 def process_audio_task(task: Tuple, 
                        single_project_list: List[str], 
+                       audiodir: str,
                        audio_priming_dict: Dict[str, Tuple[str, float]] = {},
                        prompt_map: Dict[str, str] = {},
                        word_map: Dict[str, List[str]] = {},
+                       language: str = 'en',
                        debug: bool = False,
                        ) -> Tuple[int, Optional[Dict[str, Any]], Optional[str]]:
     """Perform ASR on a single pending audio task. 
@@ -495,7 +509,7 @@ def process_audio_task(task: Tuple,
     
     # SQL Result: audio_results.id, reply_filename, project, data, users.username
     rowid, fname, project, audio_asr_data, username = task
-    test_filename = audio_to_filename(fname)
+    test_filename = audio_to_filename(fname, audiodir)
 
     initial_prompt = ''
     if project in single_project_list and prompt_map and project in prompt_map:
@@ -521,6 +535,7 @@ def process_audio_task(task: Tuple,
                                              priming_filename, 
                                              priming_audio_length, 
                                              initial_prompt=initial_prompt,
+                                             language=language,
                                              debug=debug,
                                              **asr_kwargs)
           if debug:
@@ -531,6 +546,7 @@ def process_audio_task(task: Tuple,
             asr_result2 = worker_asr_engine.recognize(
                test_filename, 
                initial_prompt=initial_prompt,
+               language=language,
                **asr_kwargs)
             print('ASR result without prime:' )
             pprint.pprint(asr_result2)
@@ -539,6 +555,7 @@ def process_audio_task(task: Tuple,
           asr_result = worker_asr_engine.recognize(
              test_filename, 
              initial_prompt=initial_prompt,
+             language=language,
              **asr_kwargs)
           if debug:
             print('No prime asr result:', asr_result)
@@ -552,6 +569,8 @@ def process_audio_task(task: Tuple,
 def main(asr_class_name: str, 
          model_name: str,
          db_file: str, 
+         audiodir: str,
+         language: str = 'en',
          single_word_projects: str = '',
          num_workers: int = 1,
          audio_priming_dict: Dict[str, Tuple[str, float]] = {},
@@ -567,6 +586,7 @@ def main(asr_class_name: str,
         asr_class_name: The name of the ASR engine class to instantiate.
         model_name: The Whisper model name to load.
         db_file: Path to the SQLite database file.
+        audiodir: The base directory of the uploaded audio files.
         single_word_projects: Comma-separated list of projects that require priming.
         num_workers: Number of parallel worker processes to use.
         audio_priming_dict: Mapping of username to priming audio path and duration.
@@ -596,9 +616,11 @@ def main(asr_class_name: str,
     worker_func = partial(
         process_audio_task,
         single_project_list=single_word_project_list,
+        audiodir=audiodir,
         audio_priming_dict=audio_priming_dict,
         prompt_map=prompt_map,
         word_map=word_map,
+        language=language,
         debug=debug
     )
 
@@ -746,7 +768,8 @@ def run_main(argv):
     # target audio for single-word tests.
     if FLAGS.use_prime:
       audio_priming_dict = get_highest_snr_files_with_duration(FLAGS.dbfile,
-                                                              'quick')
+                                                              'quick',
+                                                              audiodir=FLAGS.audiodir)
     else:
        audio_priming_dict = {}
 
@@ -770,6 +793,8 @@ def run_main(argv):
         asr_class_name=asr_class_name,
         model_name=FLAGS.model,
         db_file=FLAGS.dbfile,
+        audiodir=FLAGS.audiodir,
+        language=FLAGS.language,
         single_word_projects=FLAGS.single_word_projects,
         num_workers=FLAGS.num_workers,
         audio_priming_dict=audio_priming_dict,
