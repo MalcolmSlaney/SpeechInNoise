@@ -559,9 +559,10 @@ def process_audio_task(task: Tuple,
              **asr_kwargs)
           if debug:
             print('No prime asr result:', asr_result)
-        
+        sys.stdout.flush()
         return rowid, asr_result, None
     except Exception as e:
+        sys.stdout.flush()
         return rowid, None, str(e)
 
 #################### MAIN Program ####################

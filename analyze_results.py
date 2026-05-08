@@ -461,12 +461,13 @@ def accumulate_errors(sum: NDArray, human: ArrayLike, asr: ArrayLike) -> None:
 # sum
 
 
-def all_test_confusions(all_results: List[QS_result]) -> Dict[str, NDArray]:
+def all_test_confusions(all_results: List[QS_result], 
+                        valid_subject_re: re.Pattern) -> Dict[str, NDArray]:
   """Create a dictionary of confusion matrices, one per test type.
   Each confusion matrix is indexed by
     human, asr
   """
-  valid_subject_re = re.compile('A\\d+[SP]\\d+')
+  valid_subject_re = re.compile(valid_subject_re)
   all_confusions = {}
   for r in all_results:
     if valid_subject_re.match(r.user_name):
@@ -596,7 +597,7 @@ def generate_html_report(all_results: List[QS_result],
     </tr>
   """
 
-  valid_subject_re = re.compile('A\\d+[PS]\\d+')
+  valid_subject_re = re.compile(FLAGS.subject_filter)
   row_count = 0
   for result in all_results[:max_number]:
     if not valid_subject_re.match(result.user_name):
@@ -663,6 +664,8 @@ flags.DEFINE_bool('only_foreign', False,
                   'Whether to only show foreign recognizer results in discrepancies html')
 flags.DEFINE_bool('only_discrepancies', True, 
                   'Whether to only show human/machine discrepancies the final html')
+flags.DEFINE_string('subject_filter', 'A\\d+[SP]\\d+', 
+                    'Regex to filter which subjects to include in the analysis.')
 flags.DEFINE_integer('debug_count', 0, 
                      'Number of examples to print debug info for when scoring ASR system.')
 # flags.DEFINE_boolean('debug', False, 'Enable debug mode.')
@@ -683,7 +686,8 @@ def main(argv):
   csv_file = save_results_as_csv(all_results, 'quicksin_results.csv')
 
   # Summarize the test results
-  all_confusions = all_test_confusions(all_results)
+  all_confusions = all_test_confusions(all_results, 
+                                       valid_subject_re=FLAGS.subject_filter)
   plot_confusions(all_confusions)
   plt.savefig('confusion_matrices.png')
 
