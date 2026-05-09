@@ -90,9 +90,13 @@ def process_all_files(directory: str = '.', pattern='sin*',
     if file.endswith(output_suffix):
       # Already processed.  Skip now.
       continue
-    # Should check to see if output file is already there and then skip...
     if any([file.endswith(s) for s in skip_suffixes]):
       continue
+    # Should check to see if output file is already there and then skip...
+    output_wav_filename = file + output_suffix
+    if os.path.exists(output_wav_filename):
+      continue
+
     rate, audio_data = read_mp4(file)
     if audio_data is None:
       continue
@@ -102,7 +106,6 @@ def process_all_files(directory: str = '.', pattern='sin*',
           f'new size {new_audio.shape[0]/rate}s')
 
     # Write out the new .wav file.
-    output_wav_filename = file + output_suffix
     scipy.io.wavfile.write(output_wav_filename, rate, new_audio)
 
 
