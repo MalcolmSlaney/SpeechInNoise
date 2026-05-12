@@ -15,7 +15,7 @@ from absl import flags
 def read_mp4(audio_url, 
              tmp_wav_file: str = '/tmp/audio.wav') -> Tuple[float, NDArray]:
   # Use ffmpeg to convert the mp4 to wav at 16kHz
-  subprocess.run(['ffmpeg', '-loglevel', 'quiet', '-i', audio_url, 
+  subprocess.run(['ffmpeg', '-y', '-loglevel', 'quiet', '-i', audio_url, 
                   '-acodec', 'pcm_s16le', '-ar', '16000', tmp_wav_file])
 
   # Read the wav file using scipy
