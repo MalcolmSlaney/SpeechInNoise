@@ -485,7 +485,7 @@ def process_audio_task(task: Tuple,
                        audiodir: str,
                        audio_priming_dict: Dict[str, Tuple[str, float]] = {},
                        prompt_map: Dict[str, str] = {},
-                       word_map: Dict[str, List[str]] = {},
+                       valid_word_map: Dict[str, List[str]] = {},
                        language: str = 'en',
                        debug: bool = False,
                        ) -> Tuple[int, Optional[Dict[str, Any]], Optional[str]]:
@@ -498,7 +498,7 @@ def process_audio_task(task: Tuple,
         project_list: List of single-word projects that require priming.
         audio_priming_dict: Mapping from username to priming audio file and duration.
         prompt_map: Mapping from project name to initial prompt string.
-        word_map: Mapping from project name to list of valid words.
+        valid_word_map: Mapping from project name to list of valid words.
         debug: If True, print debug output during processing.
 
     Returns:
@@ -518,10 +518,10 @@ def process_audio_task(task: Tuple,
         initial_prompt = prompt_map[project]
 
     asr_kwargs = {}
-    if FLAGS.use_forced and word_map and project in word_map:
+    if FLAGS.use_forced and valid_word_map and project in valid_word_map:
         if debug:
             print(f'Using forced vocabulary for project {project}')
-        asr_kwargs['valid_words'] = word_map[project]
+        asr_kwargs['valid_words'] = valid_word_map[project]
         asr_kwargs['oov_penalty'] = FLAGS.oov_penalty
 
     try:
@@ -576,7 +576,7 @@ def main(asr_class_name: str,
          num_workers: int = 1,
          audio_priming_dict: Dict[str, Tuple[str, float]] = {},
          prompt_map: Dict[str, str] = {},
-         word_map: Dict[str, List[str]] = {},
+         valid_word_map: Dict[str, List[str]] = {},
          target_projects: List[str] = ['cnc', 'win', 'nu6'],
          count: int = 0,
          debug: bool = False,
@@ -620,7 +620,7 @@ def main(asr_class_name: str,
         audiodir=audiodir,
         audio_priming_dict=audio_priming_dict,
         prompt_map=prompt_map,
-        word_map=word_map,
+        valid_word_map=valid_word_map,
         language=language,
         debug=debug
     )
@@ -806,7 +806,7 @@ def run_main(argv):
         num_workers=FLAGS.num_workers,
         audio_priming_dict=audio_priming_dict,
         prompt_map=project_prompts,
-        word_map=project_word_map,
+        valid_word_map=project_word_map,
         target_projects=FLAGS.target_projects,
         count=FLAGS.count,
         debug=FLAGS.debug)

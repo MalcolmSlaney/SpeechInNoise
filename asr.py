@@ -131,8 +131,10 @@ class OOVLogitFilter(LogitFilter):
         logits[:, mask] -= self.penalty
 
 class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
-    def recognize(self, audio_path, initial_prompt='', 
-                  valid_words=None, oov_penalty=10.0,
+    def recognize(self, audio_path: str, 
+                  initial_prompt: str = '', 
+                  valid_words: List[str] = None, 
+                  oov_penalty: float = 10.0,
                   language='en') -> dict[str, Any]:
         options = {"initial_prompt": initial_prompt, 
                    "word_timestamps": True,
@@ -182,8 +184,8 @@ class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
             try:
                 # Transcribe with the hooked filter
                 result = self.model.transcribe(audio_path, **options)
-                # print(f"Applied OOV filter with {len(allowed_token_ids)} allowed tokens and penalty {oov_penalty}")
-                # print(f' Transcribe returned: {result}')
+                print(f"Applied OOV filter with {len(allowed_token_ids)} allowed tokens and penalty {oov_penalty}")
+                print(f' Transcribe returned: {result}')
             finally:
                 # Always restore the original function so we don't permanently break it
                 DecodingTask.__init__ = original_init
