@@ -789,6 +789,12 @@ def run_main(argv):
         asr_class_name = 'PromptedWhisperASR'
     else:
         asr_class_name = 'WhisperASR'
+    if FLAGS.debug:
+        print(f'Using ASR class: {asr_class_name}')
+        print(f'Audio priming dict: {audio_priming_dict}')
+        print(f'Project prompts: {project_prompts}')
+        print(f'Project word map: {project_word_map}')
+
 
     main(
         asr_class_name=asr_class_name,

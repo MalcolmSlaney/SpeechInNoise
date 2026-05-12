@@ -513,7 +513,7 @@ def plot_confusions(all_confusions: Dict[str, NDArray]):
 def fix_encoding(bad_string: str) -> str:
   try:
     fixed_string = bad_string.encode('cp1252').decode('utf-8')
-    print(f"Repaired text: {fixed_string}") 
+    print(f"Repaired text: {bad_string} -> {fixed_string}") 
     # Output: Боль
   except (UnicodeEncodeError, UnicodeDecodeError):
     # Fallback if the string wasn't actually mojibake
