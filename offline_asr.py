@@ -87,6 +87,24 @@ flags.DEFINE_integer(
     1,
     'Number of concurrent workers for ASR processing. Running multiple workers will multiply your RAM/VRAM usage.'
 )
+flags.DEFINE_list(
+  'target_projects',
+  'azbio,azbio_quiet,cnc,qs3,quick,win',
+  'Which projects need language priming or prompting for single-word tests; provide as a comma-separated list with no spaces.'
+)
+
+# Recognition directions:
+#  use_prime: prime the recognition with an extra copy of the audio to encourage 
+#     better decoding of short audio files. This is a form of acoustic priming.
+#  use_prompt: use a text prompt built from the valid words list to encourage 
+#     better decoding of short audio files. This is a form of language priming.
+#  use_forced: use grammar-based forced decoding to restrict output to the valid 
+#     words list. This is a form of language priming that is more extreme than 
+#     prompting.
+#  use_exact: if true, specify the grammar using only the correct answer (and 
+#     so the oov penalty will be applied to all incorrect answers). This is the 
+#     most extreme form of priming and is only recommended for single-word tests 
+#     with a small number of answer choices.
 flags.DEFINE_boolean(
     'use_prime',
     False,
@@ -102,6 +120,11 @@ flags.DEFINE_boolean(
     False,
     'If True, use grammar-based forced recognition restricting output to words in --valid_words.'
 )
+flags.DEFINE_boolean(
+    'use_exact'
+    False,
+    'If True, use the exact answer as the only valid word in forced decoding. This is not recommended except for single-word tests with a small number of answer choices.'
+)
 flags.DEFINE_float(
     'oov_penalty',
     10.0,
@@ -111,11 +134,6 @@ flags.DEFINE_string(
     'valid_words',
     'valid_words.json',
     'Path to a JSON file containing the project->valid words dictionary output by extract_valid_words.py.'
-)
-flags.DEFINE_list(
-  'target_projects',
-  'azbio,azbio_quiet,cnc,qs3,quick,win',
-  'Which projects need language priming or prompting for single-word tests; provide as a comma-separated list with no spaces.'
 )
 
 #################### Audio Processing Functions ####################
@@ -384,14 +402,14 @@ def get_audio_queue(
     Returns:
         A list of pending audio_result rows that have no ASR data. Each tuple
         contains the audio_results.id, reply_filename, project, data, and 
-        users.username for a trial.
+        users.username and ground-truth answer or a trial.
     """
     # Create a string of placeholders (?, ?, ?) matching the length of your list
     placeholders = ', '.join(['?'] * len(target_projects))
 
     # Construct the query
     query = (
-        "SELECT audio_results.id, reply_filename, project, data, users.username "
+        "SELECT audio_results.id, reply_filename, project, data, users.username, anwers "
         "FROM audio_results "
         "LEFT JOIN audio_trials ON audio_results.trial = audio_trials.id "
         "LEFT JOIN audio_asr ON audio_results.id = audio_asr.ref "
@@ -508,7 +526,7 @@ def process_audio_task(task: Tuple,
     global worker_asr_engine
     
     # SQL Result: audio_results.id, reply_filename, project, data, users.username
-    rowid, fname, project, audio_asr_data, username = task
+    rowid, fname, project, audio_asr_data, username, answer = task
     test_filename = audio_to_filename(fname, audiodir)
 
     initial_prompt = ''
@@ -522,6 +540,11 @@ def process_audio_task(task: Tuple,
         if debug:
             print(f'Using forced vocabulary for project {project}')
         asr_kwargs['valid_words'] = valid_word_map[project]
+        asr_kwargs['oov_penalty'] = FLAGS.oov_penalty
+    elif FLAGS.use_exact:
+        if debug:
+            print(f'Using exact answer for project {project}')
+        asr_kwargs['valid_words'] = [answer]
         asr_kwargs['oov_penalty'] = FLAGS.oov_penalty
 
     try:
@@ -740,7 +763,7 @@ def run_main(argv):
         assert project in valid_projects, f'Target project "{project}" not found in database projects: {valid_projects}'
 
     if FLAGS.force:
-        if FLAGS.use_forced:
+        if FLAGS.use_forced or FLAGS.use_exact:
             model_type = 'forced'
         elif FLAGS.use_prompt:
             model_type = 'prompted'
@@ -783,7 +806,7 @@ def run_main(argv):
             print(f"User '{username}' does not have a valid file for priming.")
     print(f"Total users with valid priming files: {count}")
 
-    if FLAGS.use_forced:
+    if FLAGS.use_forced or FLAGS.use_exact:
         asr_class_name = 'ForcedWhisperASR'
     elif FLAGS.use_prompt:
         asr_class_name = 'PromptedWhisperASR'
