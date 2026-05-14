@@ -18,6 +18,6 @@ for oov in 1000 -10 100 0 10 ; do
     --oov_penalty $oov  --debug > $dir/offline_asr.log
 
   # Now that we have the ASR results, run the analysis and save the results.
-  python analyze_results.py --dbfile experiments_exp1_${prompt}.db --debug_count=100000 > $dir/analysis.txt
+  python analyze_results.py --dbfile $dbfile --debug_count=100000 > $dir/analysis.txt
   mv asr_audiology_discrepancies.html confusion_matrices.png quicksin_results.csv $dir/
 done
