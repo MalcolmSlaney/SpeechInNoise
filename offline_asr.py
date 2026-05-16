@@ -409,7 +409,7 @@ def get_audio_queue(
 
     # Construct the query
     query = (
-        "SELECT audio_results.id, reply_filename, project, data, users.username, anwers "
+        "SELECT audio_results.id, reply_filename, project, data, users.username, answers "
         "FROM audio_results "
         "LEFT JOIN audio_trials ON audio_results.trial = audio_trials.id "
         "LEFT JOIN audio_asr ON audio_results.id = audio_asr.ref "
