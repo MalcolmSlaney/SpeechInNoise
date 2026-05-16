@@ -121,7 +121,7 @@ flags.DEFINE_boolean(
     'If True, use grammar-based forced recognition restricting output to words in --valid_words.'
 )
 flags.DEFINE_boolean(
-    'use_exact'
+    'use_exact',
     False,
     'If True, use the exact answer as the only valid word in forced decoding. This is not recommended except for single-word tests with a small number of answer choices.'
 )
