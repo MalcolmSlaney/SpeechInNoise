@@ -6,6 +6,8 @@ import os
 import glob
 import re
 import matplotlib.pyplot as plt
+import numpy as np
+
 from absl import app
 from absl import flags
 from absl import logging
@@ -13,7 +15,7 @@ from absl import logging
 # Define command line flags
 FLAGS = flags.FLAGS
 flags.DEFINE_string('base_dir', 'exp1', 'Base directory containing the experiment folders.')
-flags.DEFINE_string('output_plot', 'summary_plot.png', 'Filename to save the generated plot.')
+flags.DEFINE_string('output_plot', 'summary_oov_plot.png', 'Filename to save the generated plot.')
 
 def parse_metrics(filepath):
     """Parses the last 8 lines of the file to find 'cnc' and 'win' values."""
@@ -86,20 +88,24 @@ def main(argv):
     oov_penalties, cnc_values, win_values = zip(*data)
 
     # Create the plot
-    plt.figure(figsize=(10, 6))
-    
+    fig, ax = plt.subplots(layout='constrained')
+    x = np.arange(len(oov_penalties))  # Use index for x-axis to ensure proper spacing
+    width = 0.35  # Width of the bars 
     # Plot CNC and Win on the same graph
-    plt.plot(oov_penalties, cnc_values, marker='o', linestyle='-', label='CNC', color='blue')
-    plt.plot(oov_penalties, win_values, marker='s', linestyle='--', label='Win', color='orange')
+    rects = ax.bar(x - width/2, cnc_values, width=width, label='CNC', color='blue')
+    ax.bar_label(rects, padding=3)
+    rects = ax.bar(x + width/2, win_values, width=width, label='Win', color='orange')
+    ax.bar_label(rects, padding=3)
     
-    plt.title('CNC and Win Correct vs. OOV Penalty')
-    plt.xlabel('OOV Penalty')
-    plt.ylabel('Words Correct (%)')
-    plt.grid(True, which='both', linestyle='--', alpha=0.7)
-    plt.legend()
+    ax.set_title('Single Word Correct vs. OOV Penalty')
+    ax.set_xticks(x, oov_penalties)
+
+    ax.set_xlabel('OOV Penalty')
+    ax.set_ylabel('Words Correct (%)')
+    ax.legend(ncols=2)
     
     # Save and optionally show the plot
-    plt.tight_layout()
+    # plt.tight_layout()
     plt.savefig(FLAGS.output_plot)
     logging.info(f"Plot saved successfully to {FLAGS.output_plot}")
     plt.show()
