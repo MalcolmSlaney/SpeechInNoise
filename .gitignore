@@ -11,6 +11,10 @@ secret_key_google_text_to_speech
 malcolm_notes.txt
 quicksin_results.csv
 exp*/
+/test_config.py
+/output.mp3
+/output.wav
+/consent_form_uploads
 
 # Python byte-compiled / optimized / DLL files
 __pycache__/
