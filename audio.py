@@ -11,7 +11,8 @@ class AudioDB(Database):
     csv_keys = (
         "active", "lang", "trial_number", "level_number", "filename", "answer")
     id_keys = {"lang", "trial_number", "level_number"}
-    upserting = False
+    # insert or replace in the database without wiping
+    upserting = True
 
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
