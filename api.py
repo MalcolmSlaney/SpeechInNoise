@@ -9,11 +9,13 @@ from projects import (
     AzBioQuietDB, AzBioQuietBP,
     CncDB, CncBP,
     WinDB, WinBP,
+    AzBioSpanishDB, AzBioSpanishBP,
+    AzBioSpanishQuietDB, AzBioSpanishQuietBP,
 )
 from review import ReviewBP
 
 # use multiple inheritance to add other DB hooks
-class ExperimentDB(QuickDB, Qs3DB, Nu6DB, AzBioDB, AzBioQuietDB, CncDB, WinDB):
+class ExperimentDB(QuickDB, Qs3DB, Nu6DB, AzBioDB, AzBioQuietDB, CncDB, WinDB, AzBioSpanishDB, AzBioSpanishQuietDB):
     def _username_hook(self):
         res = set_username(self)
         super()._username_hook()
@@ -40,15 +42,25 @@ class APIBlueprint(DatabaseBP):
             "cnc": CncBP,
             "win": WinBP,
             "review": ReviewBP,
+            "azbio_spanish": AzBioSpanishBP,
+            "azbio_spanish_quiet": AzBioSpanishQuietBP,
         }
         assert self.default_project in self.projects and "" not in self.projects
         for bp in self.projects.keys():
-            self.projects[bp] = self.projects[bp](db)
-            self.register_blueprint(self.projects[bp])
+                self.projects[bp] = self.projects[bp](db)
+                self.register_blueprint(self.projects[bp])
         self._route_db("/username-available")(username_available)
         self._route_db("/set-username")(username_hook)
         self._route_db("/authorized", methods=["POST"])(authorized)
         self._route_db("/lists", methods=["POST"])(self.audio_lists)
+        from storage import relpath
+        from flask import send_from_directory
+        def review_html_handler(db):
+            from flask import session, redirect
+            if not session.get("username") and not session.get("user"):
+                return redirect("/jnd/api/review/")
+            return send_from_directory(relpath("static"), "review.html")
+        self._route_db("/review.html")(review_html_handler)
 
     def _bind_db(self, app):
         super()._bind_db(app)
@@ -122,6 +134,10 @@ def set_username(db):
     session.clear()
     session["user"], session["username"] = uid, name
     session["meta"] = search
+    project_arg = request.args.get("project", "null")
+    effective_project = (
+        APIBlueprint.default_project
+        if project_arg == "null" else project_arg)
     requested = request.args.get("list", "null")
     if requested != "null":
         if "-" in requested:
@@ -136,9 +152,13 @@ def set_username(db):
             lang, trial_number = requested, None
         session["requested"] = json.dumps([lang, trial_number])
     else:
-        session["requested"] = json.dumps(['en', None])
+        # appropriate language depending on project
+        # will need to adjust for mandarin!
+        default_lang = (
+            "sp" if effective_project in (
+                "azbio_spanish", "azbio_spanish_quiet") else "en")
+        session["requested"] = json.dumps([default_lang, None])
     return json.dumps(APIBlueprint.default_project)
 
 def authorized(db):
     return json.dumps(True)
-
