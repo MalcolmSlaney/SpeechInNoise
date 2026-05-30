@@ -1,4 +1,7 @@
-/* waveform of audio files */
+/* waveform of audio files 
+* Sometimes patients were quiet before answering. Loading the waveform helps
+* reviewers know whether a response is coming, and how long they will need to wait before advancing.
+*/
 
 (function() {
   'use strict';

@@ -1,4 +1,8 @@
-/* exit session, warnings, and navigation prevention */
+/* exit session, warnings, and navigation prevention 
+* Audio plays automatically to reduce the number of clicks required.
+* Therefore we want users to score the file before exiting, so they only listen to it once.
+*/
+
 
 (function() {
     'use strict';
