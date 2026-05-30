@@ -1,3 +1,7 @@
+# File selection logic - we want all unique patient-list combinations to be reviewed with approximately even distribution.
+# If a reviewer leaves in the middle of a test, we want them to resume where they left off when they come back
+# Reviewers complete one patient-list combination at a time, and then are assigned a different patient and different list.
+
 import json
 import os
 import random
