@@ -9,11 +9,15 @@ from projects import (
     AzBioQuietDB, AzBioQuietBP,
     CncDB, CncBP,
     WinDB, WinBP,
+    AzBioSpanishDB, AzBioSpanishBP,
+    AzBioSpanishQuietDB, AzBioSpanishQuietBP,
+    AzBioMandarinDB, AzBioMandarinBP,
+    AzBioMandarinQuietDB, AzBioMandarinQuietBP,
 )
 from review import ReviewBP
 
 # use multiple inheritance to add other DB hooks
-class ExperimentDB(QuickDB, Qs3DB, Nu6DB, AzBioDB, AzBioQuietDB, CncDB, WinDB):
+class ExperimentDB(QuickDB, Qs3DB, Nu6DB, AzBioDB, AzBioQuietDB, CncDB, WinDB, AzBioSpanishDB, AzBioSpanishQuietDB, AzBioMandarinDB, AzBioMandarinQuietDB):
     def _username_hook(self):
         res = set_username(self)
         super()._username_hook()
