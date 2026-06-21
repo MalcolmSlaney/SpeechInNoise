@@ -23,6 +23,7 @@ from functools import partial
 
 from absl import app
 from absl import flags
+from absl.flags import DuplicateFlagError # To handle potential flag redefinition during testing
 import asr
 
 default_sample_rate = 22050
@@ -46,17 +47,26 @@ flags.DEFINE_string(
   'en',
   'Language code to use for transcription.'
 )
-flags.DEFINE_enum(
-    'model',
-    'medium.en',
-    models,
-    'Which Whisper model size to use; see: https://github.com/openai/whisper#available-models-and-languages'
-)
-flags.DEFINE_string(
-    'dbfile',
-    'experiments_malcolm.db',
-    'Which SQLite3 database file to process.'
-)
+
+try:
+    flags.DEFINE_enum(
+        'model',
+        'medium.en',
+        models,
+        'Which Whisper model size to use; see: https://github.com/openai/whisper#available-models-and-languages'
+    )
+except DuplicateFlagError:
+    pass # Flag was already defined by another module during pytest collection
+
+try:
+    flags.DEFINE_string(
+          'dbfile',
+          'experiments_malcolm.db',
+          'Which SQLite3 database file to process.'
+      )
+except DuplicateFlagError:
+    pass # Flag was already defined by another module during pytest collection
+
 flags.DEFINE_string(
     'single_word_projects',
     'cnc,win,nu6',
@@ -529,8 +539,6 @@ def process_audio_task(task: Tuple,
         A tuple containing the row ID, ASR result dictionary or None,
         and an optional error message.
     """
-    global worker_asr_engine
-    
     # SQL Result: audio_results.id, reply_filename, project, data, users.username
     rowid, fname, project, audio_asr_data, username, answer = task
     test_filename = audio_to_filename(fname, audiodir)

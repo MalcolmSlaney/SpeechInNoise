@@ -17,7 +17,6 @@ class Database:
                 with app.open_resource(schema, mode='r') as f:
                     db.cursor().executescript(f.read())
                 db.commit()
-                self.db_init_hook()
           else:
             raise ValueError('Can not create database without schema.')
 
@@ -25,11 +24,15 @@ class Database:
         if app:
           app.teardown_appcontext(lambda e: self.close())
 
+        # Update database with any changes to metadata CSV files
+        with app.app_context():
+            self.db_init_hook()
+
     # returns a database connection
     def get(self):
         db = getattr(g, "_database", None)
         if db is None:
-            db = g._database = sqlite3.connect(self.database)
+            db = g._database = sqlite3.connect(self.database, timeout=10.0) # timeout for multiple users
             for i in self.init:
                 self.execute(i)
         return db

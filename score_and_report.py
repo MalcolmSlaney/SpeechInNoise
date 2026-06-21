@@ -34,7 +34,10 @@ from absl import logging
 FLAGS = flags.FLAGS
 
 # Define command-line flags
-flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 'Path to the SQLite database.')
+try:
+  flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 'Path to the SQLite database.')
+except flags.DuplicateFlagError:
+  pass # Flag was already defined by another module during pytest collection
 flags.DEFINE_string('homonyms', 'homonym_list.csv', 'Path to the comma-delimited homonyms file.')
 flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html', 'Where to store the final discrepancy report.')
 flags.DEFINE_bool('only_foreign', False, 'Whether to only show foreign recognizer results in discrepancies html')

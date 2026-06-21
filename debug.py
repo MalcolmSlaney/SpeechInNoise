@@ -1,4 +1,5 @@
 from flask import Flask, Blueprint, redirect
+from storage import relpath
 from api import APIBlueprint
 
 app_prefix = "/"
@@ -6,9 +7,12 @@ app_prefix = "/"
 bp = Blueprint("main", __name__, url_prefix=app_prefix)
 bp.register_blueprint(APIBlueprint(url_prefix="/api"))
 
+# use relative location regardless of working dir
+static_dir = relpath("static")
+
 @bp.route("/")
 def index():
-    return app.send_static_file("index.html")
+    return app.send_from_directory(static_dir, "index.html")
 
 app = Flask(__name__, static_url_path=app_prefix)
 app.register_blueprint(bp)

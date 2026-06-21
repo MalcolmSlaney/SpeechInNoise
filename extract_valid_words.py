@@ -23,8 +23,11 @@ from absl import app
 from absl import flags
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string('dbfile', 'experiments_malcolm.db',
-                    'Path to the SQLite database file.')
+try:
+  flags.DEFINE_string('dbfile', 'experiments_malcolm.db',
+                      'Path to the SQLite database file.')
+except flags.DuplicateFlagError:
+    pass # Flag was already defined by another module during pytest collection
 flags.DEFINE_string('output', 'valid_words.json',
                     'Optional output path for a JSON file containing the project->words dictionary. If omitted, writes JSON to stdout.')
 flags.DEFINE_boolean('lowercase', True,

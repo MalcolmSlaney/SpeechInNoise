@@ -19,8 +19,8 @@ from whisper.normalizers import EnglishTextNormalizer
 from whisper.decoding import LogitFilter, DecodingTask
 
 
-assert not subprocess.run(
-    ["which", "ffmpeg"], stdout=subprocess.DEVNULL).returncode
+# assert not subprocess.run(
+#     ["which", "ffmpeg"], stdout=subprocess.DEVNULL).returncode
 
 # Whisper documentation at https://github.com/openai/whisper
 

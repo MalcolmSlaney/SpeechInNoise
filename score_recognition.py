@@ -24,7 +24,10 @@ from absl import logging
 FLAGS = flags.FLAGS
 
 # Define command-line flags
-flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 'Path to the SQLite database.')
+try:
+  flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 'Path to the SQLite database.')
+except flags.DuplicateFlagError:
+  pass # Flag was already defined by another module during pytest collection
 flags.DEFINE_string('homonyms', 'homonym_list.csv', 'Path to the comma-delimited homonyms file.')
 
 def load_homonyms(filepath: str) -> Dict[str, Set[str]]:

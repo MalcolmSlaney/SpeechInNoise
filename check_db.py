@@ -1,51 +1,182 @@
-"""Small program to check the status of the database and the number of
-trials that have been populated with ASR results.
+"""Check the database for missing rows, orphaned records, and duplicate ASR entries.
+
+This script prints a summary of the main tables and runs SQLite integrity checks
+so you can confirm that data was not lost during imports or migrations.
 """
 
-
-import sqlite3
 import json
 import os
+import sqlite3
 
-db_path = "experiments_malcolm.db" # Ensure this matches your filename
+DB_PATH = "experiments_malcolm.db"
 
-def verify():
+TABLES_TO_CHECK = [
+    "users",
+    "user_info",
+    "audio_trials",
+    "audio_results",
+    "audio_asr",
+    "audio_annotations",
+    "review_annotations",
+]
+
+
+def count_rows(cur, table):
+    cur.execute(f"SELECT COUNT(*) FROM {table}")
+    return cur.fetchone()[0]
+
+
+def table_exists(cur, table):
+    cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    )
+    return cur.fetchone() is not None
+
+
+def count_missing(cur, query):
+    cur.execute(query)
+    return cur.fetchone()[0]
+
+
+def preview_json(value, limit=120):
+    if value is None:
+        return "NULL"
+    text = value if isinstance(value, str) else json.dumps(value)
+    return text if len(text) <= limit else text[:limit] + "..."
+
+
+def verify(db_path=DB_PATH):
     if not os.path.exists(db_path):
         print(f"Error: Database file not found at {os.path.abspath(db_path)}")
         return
 
+    print(f"--- Database Report: {db_path} ---")
+    print(f"File size: {os.path.getsize(db_path)} bytes")
+
     with sqlite3.connect(db_path) as con:
+        con.row_factory = sqlite3.Row
         cur = con.cursor()
-        
-        # 1. Check if the table exists
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='audio_asr'")
-        if not cur.fetchone():
-            print("Table 'audio_asr' does NOT exist.")
-            return
+        cur.execute("PRAGMA foreign_keys = ON")
 
-        # 2. Get total row count
-        cur.execute("SELECT COUNT(*) FROM audio_asr")
-        total_rows = cur.fetchone()[0]
-        
-        # 3. Get count of rows where data is actually present
-        cur.execute("SELECT COUNT(*) FROM audio_asr WHERE data IS NOT NULL AND data != ''")
-        populated_rows = cur.fetchone()[0]
+        existing_tables = [name for name in TABLES_TO_CHECK if table_exists(cur, name)]
+        missing_tables = [name for name in TABLES_TO_CHECK if name not in existing_tables]
 
-        print(f"--- Database Report: {db_path} ---")
-        print(f"Total rows in 'audio_asr': {total_rows}")
-        print(f"Populated ASR results:     {populated_rows}")
-        print(f"Empty/Null results:        {total_rows - populated_rows}")
+        print(f"Tables found: {len(existing_tables)} / {len(TABLES_TO_CHECK)}")
+        if missing_tables:
+            print("Missing tables:")
+            for table in missing_tables:
+                print(f"  - {table}")
 
-        # 4. Show a sample of the data if it exists
-        if populated_rows > 0:
-            print("\nSample Data (First 2 rows):")
-            cur.execute("SELECT ref, data FROM audio_asr WHERE data IS NOT NULL LIMIT 2")
-            for ref, data in cur.fetchall():
-                # Preview just the start of the JSON string
-                preview = data[:100] + "..." if len(data) > 100 else data
-                print(f"Ref {ref}: {preview}")
+        # Row counts for the main tables.
+        print("\nRow counts:")
+        for table in TABLES_TO_CHECK:
+            if table_exists(cur, table):
+                print(f"  {table}: {count_rows(cur, table)}")
+            else:
+                print(f"  {table}: <missing>")
+
+        # Referential integrity checks.
+        print("\nConsistency checks:")
+        checks = {
+            "audio_results with missing trial": (
+                "SELECT COUNT(*) FROM audio_results ar "
+                "LEFT JOIN audio_trials at ON ar.trial = at.id "
+                "WHERE at.id IS NULL"
+            ),
+            "audio_results with missing subject": (
+                "SELECT COUNT(*) FROM audio_results ar "
+                "LEFT JOIN users u ON ar.subject = u.id "
+                "WHERE u.id IS NULL"
+            ),
+            "audio_results with null subject or trial": (
+                "SELECT COUNT(*) FROM audio_results WHERE subject IS NULL OR trial IS NULL"
+            ),
+            "audio_asr with missing ref": (
+                "SELECT COUNT(*) FROM audio_asr a "
+                "LEFT JOIN audio_results r ON a.ref = r.id "
+                "WHERE r.id IS NULL"
+            ),
+            "audio_annotations with missing ref": (
+                "SELECT COUNT(*) FROM audio_annotations aa "
+                "LEFT JOIN audio_results r ON aa.ref = r.id "
+                "WHERE r.id IS NULL"
+            ),
+            "review_annotations with missing ref": (
+                "SELECT COUNT(*) FROM review_annotations ra "
+                "LEFT JOIN audio_results r ON ra.ref = r.id "
+                "WHERE r.id IS NULL"
+            ),
+            "review_annotations with missing labeler": (
+                "SELECT COUNT(*) FROM review_annotations ra "
+                "LEFT JOIN users u ON ra.labeler = u.id "
+                "WHERE u.id IS NULL"
+            ),
+            "duplicate audio_asr refs": (
+                "SELECT COUNT(*) FROM ("
+                "SELECT ref FROM audio_asr GROUP BY ref HAVING COUNT(*) > 1"
+                ")"
+            ),
+            "duplicate audio_results (same subject/trial)": (
+                "SELECT COUNT(*) FROM ("
+                "SELECT subject, trial FROM audio_results "
+                "GROUP BY subject, trial HAVING COUNT(*) > 1"
+                ")"
+            ),
+            "audio_asr rows with empty data": (
+                "SELECT COUNT(*) FROM audio_asr WHERE data IS NULL OR data = ''"
+            ),
+        }
+
+        for label, query in checks.items():
+            if all(table_exists(cur, table) for table in ["audio_results", "audio_trials", "users", "audio_asr", "audio_annotations", "review_annotations"]):
+                print(f"  {label}: {count_missing(cur, query)}")
+            else:
+                print(f"  {label}: skipped (required table missing)")
+
+        # SQLite-level integrity checks.
+        cur.execute("PRAGMA integrity_check")
+        integrity = [row[0] for row in cur.fetchall()]
+        print("\nSQLite integrity_check:")
+        for item in integrity:
+            print(f"  {item}")
+
+        cur.execute("PRAGMA foreign_key_check")
+        fk_issues = cur.fetchall()
+        print("\nforeign_key_check results:")
+        if fk_issues:
+            for row in fk_issues:
+                print(f"  {row}")
         else:
-            print("\nNo data found. This suggests the INSERTs didn't commit or the path was wrong.")
+            print("  none")
+
+        # Sample data preview.
+        if table_exists(cur, "audio_asr") and count_rows(cur, "audio_asr") > 0:
+            print("\nSample audio_asr rows (first 3):")
+            # Some schemas may not have the extra ASR scoring columns yet.
+            try:
+                cur.execute(
+                    "SELECT ref, data, gt_word_count, correct_word_count FROM audio_asr "
+                    "ORDER BY ref LIMIT 3"
+                )
+                preview_rows = cur.fetchall()
+                for row in preview_rows:
+                    print(
+                        f"  ref={row['ref']} | data={preview_json(row['data'])} | "
+                        f"gt_word_count={row['gt_word_count']} | "
+                        f"correct_word_count={row['correct_word_count']}"
+                    )
+            except sqlite3.OperationalError:
+                cur.execute(
+                    "SELECT ref, data FROM audio_asr ORDER BY ref LIMIT 3"
+                )
+                for row in cur.fetchall():
+                    print(
+                        f"  ref={row['ref']} | data={preview_json(row['data'])}"
+                    )
+        else:
+            print("\nNo audio_asr rows found.")
+
 
 if __name__ == "__main__":
     verify()
