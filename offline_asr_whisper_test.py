@@ -4,6 +4,7 @@ import os
 import re
 import urllib.request
 from absl.testing import absltest
+import numpy as np
 
 # Assuming your 'asr' wrapper module is in the same directory or PYTHONPATH
 import asr

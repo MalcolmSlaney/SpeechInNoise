@@ -47,6 +47,7 @@ type like QuickSIN, AzBio, CNC, etc.)
 
 """
 from absl import app, flags
+from absl.flags import DuplicateFlagError # To handle potential flag redefinition during testing
 import csv
 from dataclasses import dataclass
 from datetime import datetime # Make sure this is at the top of your file
@@ -74,7 +75,7 @@ def get_all_sql_data(database: str = 'experiments.db'):
       audio_trials.id, audio_trials.project, audio_trials.snr, audio_trials.lang, audio_trials.level_number, audio_trials.trial_number, audio_trials.filename, audio_trials.answer, audio_trials.active,
       users.id, users.username, users.ip, users.t,
       user_info.user, user_info.info_key, user_info.value, user_info.t,
-      audio_asr.ref, audio_asr.data,
+      audio_asr.ref, audio_asr.data, audio_asr.gt_word_count, audio_asr.correct_word_count, audio_asr.asr_clean_tokens,
       audio_annotations.ref, audio_annotations.data
     FROM audio_results
     LEFT JOIN audio_trials ON audio_results.trial=audio_trials.id
@@ -667,8 +668,11 @@ def generate_html_report(all_results: List[QS_result],
 FLAGS = flags.FLAGS
 
 # Define flags
-flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 
-                    'Sqllite3 database to read the experients results.')
+try:
+  flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 
+                      'Sqllite3 database to read the experients results.')
+except DuplicateFlagError:
+    pass # Flag was already defined by another module during pytest collection
 flags.DEFINE_string('homonyms', 'homonym_list.csv', 
                     'CSV file containing list of homonyms.')
 flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html', 

@@ -216,14 +216,15 @@ body.overlaying #results-overlay {
     flex-direction: row;
     display: flex;
     flex-grow: 2;
-    justify-content: space-around;
+    justify-content: center;
+    gap: 40px;
 }
 
 #audio-controls {
     display: flex;
     flex-direction: column;
     justify-content: space-around;
-    flex-grow: 2;
+    flex: 0 0 auto;
 }
 
 #next-wrapper {
@@ -231,22 +232,24 @@ body.overlaying #results-overlay {
 }
 
 #next-audio {
-    align-self: flex-start;
+    align-self: center;
 }
 
 #aux-data {
-    padding: 5% 5% 5% 0;
-    flex-grow: 1;
+    padding: clamp(2%, 2vh, 5%);
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: flex-start;
+    max-height: 100%;
+    overflow: hidden;
 }
 
 .options-case {
     display: flex;
     flex-direction: column;
-    justify-content: space-around;
-    height: 100%;
+    justify-content: flex-start;
     align-items: stretch;
 }
 
@@ -282,7 +285,7 @@ body.overlaying #results-overlay {
     text-align: center;
 }
 
-form:invalid + #next-wrapper #next-audio {
+form:invalid #next-audio {
   background: var(--disabled);
   cursor: inherit;
   pointer-events: none;

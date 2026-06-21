@@ -106,10 +106,29 @@ CREATE TABLE audio_annotations (
   FOREIGN KEY(ref) REFERENCES audio_results(id)
 );
 
+/* Table to track reviewer demographics and progress. */
+CREATE TABLE reviewers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  t TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  role TEXT NOT NULL CHECK(role IN('student', 'audiologist')),
+  years_practicing INTEGER CHECK((role = 'audiologist' AND years_practicing IS NOT NULL) OR (role = 'student' AND years_practicing IS NULL)),
+  completed_tests TEXT, /* JSON array of unique patient-test pairs */
+  test_in_progress TEXT, /* Tuple of unique test-patient pairs in progress) */
+  remaining_tests TEXT, /* JSON array of unique patient-test pairs left to complete */
+  most_recent_subject INTEGER, /* ID of most recent subject reviewed */
+  total_reviews INTEGER DEFAULT 0, /* Total number of reviews by this reviewer */
+  played_audio TEXT, /* JSON array of audio_results.id that have been played but not yet reviewed - should be max 1 */
+  notes TEXT,
+  consent_form BLOB NOT NULL, /* Consent form signed by reviewer */
+  test_type TEXT NOT NULL DEFAULT 'patient' CHECK(test_type IN('prepilot', 'pilot', 'patient', 'in_clinic_audiologist')) /* Role - remote audiologists are patients, in-clinic audiologists are in the booth */
+);
+
 CREATE TABLE review_annotations (
   ref INTEGER,
   data TEXT,
   labeler INTEGER,
+  unclear BOOLEAN DEFAULT 0 CHECK(unclear IN(0,1)), /* Marked as unclear/unsure by reviewer, in case we need to exclude */
   FOREIGN KEY(ref) REFERENCES audio_results(id),
   FOREIGN KEY(labeler) REFERENCES users(id)
 );

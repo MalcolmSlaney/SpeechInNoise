@@ -1,5 +1,5 @@
 ## Useful commands
-Deploy server and detach process
+Deploy server and detach process from the appropriate folder path.
 ```bash
 conda activate quicksin # Or whatever environment you use
 nohup sh server.sh & tail -f nohup.out
@@ -40,7 +40,7 @@ And within that the Web_Audio folder has the renamed data we play to subjects.
 
 ## Adding tests
 To add a new type of audio test do the following:
-1. Add a section to the [colab](https://colab.research.google.com/drive/1EOPHV74jawtxrZSQh94Dp5AFAGFt0Pkn?usp=sharing) to create the transcript (csv) for the new test data.
+1. Add a section to the [colab](https://colab.research.google.com/drive/1EOPHV74jawtxrZSQh94Dp5AFAGFt0Pkn?usp=sharing) to create the transcript (csv) for the new test data. Watch for Google Drive permissions.
 1. Add new transcript to the `metadata` folder matching the path in the spec class below
 2. In `projects.py`, add a new spec, blueprint and database classes for the project
 3. In `api.py`,

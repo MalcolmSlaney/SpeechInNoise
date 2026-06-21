@@ -29,6 +29,7 @@ python offline_asr.py --dbfile $dbfile --target_projects="azbio_spanish,azbio_sp
   --language=es --debug > $dir/offline_asr.log
 
 # Now that we have the ASR results, run the analysis and save the results.
-  python analyze_results.py --dbfile $dbfile  \
-    --debug_count=100000 > $dir/analysis.txt
+  # python analyze_results.py --dbfile $dbfile  \
+  #   --debug_count=100000 > $dir/analysis.txt
+  python score_and_report.py --dbfile $dbfile> $dir/analysis.txt
   mv asr_audiology_discrepancies.html confusion_matrices.png quicksin_results.csv $dir/

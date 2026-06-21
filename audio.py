@@ -11,7 +11,8 @@ class AudioDB(Database):
     csv_keys = (
         "active", "lang", "trial_number", "level_number", "filename", "answer")
     id_keys = {"lang", "trial_number", "level_number"}
-    upserting = False
+    # insert or replace in the database without wiping
+    upserting = True
 
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
@@ -354,7 +355,7 @@ class AudioAnnotatedBP(AudioBP):
             json.loads(session.pop("requested", None))[0], None])
         return ""
 
-    def audio_effort(self, db):
+    def audio_effort(self, db, effort):
         if "user" not in session or "v" not in request.args:
             abort(400)
         try:

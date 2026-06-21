@@ -2,6 +2,7 @@ import pprint
 import sys
 from absl import app
 from absl import flags
+from absl.flags import DuplicateFlagError
 
 # Import your ASR module
 import asr
@@ -25,11 +26,24 @@ flags.DEFINE_string(
     '', 
     'Initial prompt to bias the model.'
 )
-flags.DEFINE_string(
-    'model', 
-    'tiny.en', 
-    'Whisper model to load (default: tiny.en).'
-)
+
+models = [
+    "tiny.en", "tiny",
+    "base.en", "base",
+    "small.en", "small",
+    "medium.en", "medium",
+    "large"
+]
+
+try:
+  flags.DEFINE_enum(
+      'model',
+      'medium.en',
+      models,
+      'Which Whisper model size to use; see: https://github.com/openai/whisper#available-models-and-languages'
+  )
+except DuplicateFlagError:
+  pass # Flag was already defined by another module during pytest collection
 
 # --- Standard single-run penalty flag ---
 flags.DEFINE_float(
