@@ -44,6 +44,10 @@ class APIBlueprint(DatabaseBP):
             "cnc": CncBP,
             "win": WinBP,
             "review": ReviewBP,
+            "azbio_spanish": AzBioSpanishBP,
+            "azbio_spanish_quiet": AzBioSpanishQuietBP,
+            "azbio_mandarin": AzBioMandarinBP,
+            "azbio_mandarin_quiet": AzBioMandarinQuietBP,
         }
         assert self.default_project in self.projects and "" not in self.projects
         for bp in self.projects.keys():
