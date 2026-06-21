@@ -137,7 +137,8 @@ class WinBP(WinSpec, AudioOutputBP):
     def __init__(self, db, name="win", url_prefix="/win"):
         super().__init__(db, name, url_prefix)
 
-# Spanish
+
+###### Spanish
 # AzBio in Spanish with 10dB(?) SNR
 class AzBioSpanishSpec(AudioSpec):
     audio_files = relpath("metadata/azbio_spanish_transcript.csv")
@@ -164,4 +165,36 @@ class AzBioSpanishQuietDB(AzBioSpanishQuietSpec, AudioDB):
 
 class AzBioSpanishQuietBP(AzBioSpanishQuietSpec, AudioOutputBP):
     def __init__(self, db, name="azbio_spanish_quiet", url_prefix="/azbio_spanish_quiet"):
+        super().__init__(db, name, url_prefix)
+
+###### Mandarin
+# AzBio Mandarin with 10dB SNR
+
+class AzBioMandarinSpec(AudioSpec):
+    audio_files = relpath("metadata/azbio_mandarin_transcript.csv")
+    project_key = "azbio_mandarin"
+
+class AzBioMandarinDB(AzBioMandarinSpec, AudioDB):
+    def db_init_hook(self):
+        super().db_init_hook()
+        self.parse_csv(__class__)
+
+class AzBioMandarinBP(AzBioMandarinSpec, AudioOutputBP):
+    def __init__(self, db, name="azbio_mandarin", url_prefix="/azbio_mandarin"):
+        super().__init__(db, name, url_prefix)
+
+
+# AzBio Mandarin in Quiet
+
+class AzBioMandarinQuietSpec(AudioSpec):
+    audio_files = relpath("metadata/azbio_mandarin_quiet_transcript.csv")
+    project_key = "azbio_mandarin_quiet"
+
+class AzBioMandarinQuietDB(AzBioMandarinQuietSpec, AudioDB):
+    def db_init_hook(self):
+        super().db_init_hook()
+        self.parse_csv(__class__)
+
+class AzBioMandarinQuietBP(AzBioMandarinQuietSpec, AudioOutputBP):
+    def __init__(self, db, name="azbio_mandarin_quiet", url_prefix="/azbio_mandarin_quiet"):
         super().__init__(db, name, url_prefix)
