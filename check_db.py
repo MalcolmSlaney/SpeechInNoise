@@ -8,7 +8,18 @@ import json
 import os
 import sqlite3
 
-DB_PATH = "experiments_malcolm.db"
+from absl import app
+from absl import flags
+
+FLAGS = flags.FLAGS
+try:
+    flags.DEFINE_string(
+        "dbfile",
+        "experiments_malcolm.db",
+        "Path to the SQLite database file.",
+    )
+except flags.DuplicateFlagError:
+    pass
 
 TABLES_TO_CHECK = [
     "users",
@@ -46,7 +57,44 @@ def preview_json(value, limit=120):
     return text if len(text) <= limit else text[:limit] + "..."
 
 
-def verify(db_path=DB_PATH):
+def summarize_asr_results(cur):
+    """Print the fraction of audio results with computed ASR, by project."""
+    query = """
+        SELECT
+            at.project,
+            COUNT(ar.id) AS total_results,
+            SUM(
+                CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM audio_asr aa
+                    WHERE aa.ref = ar.id
+                      AND aa.data IS NOT NULL
+                      AND aa.data != ''
+                ) THEN 1 ELSE 0 END
+            ) AS computed_results
+        FROM audio_results ar
+        JOIN audio_trials at ON ar.trial = at.id
+        GROUP BY at.project
+        ORDER BY at.project
+    """
+    cur.execute(query)
+    rows = cur.fetchall()
+
+    print("\nASR completion by project:")
+    if not rows:
+        print("  No audio results found.")
+        return
+
+    print(f"  {'Project':<20} {'Computed':>10} {'Total':>10} {'Complete':>10}")
+    for row in rows:
+        percentage = 100 * row["computed_results"] / row["total_results"]
+        print(
+            f"  {row['project']:<20} {row['computed_results']:>10} "
+            f"{row['total_results']:>10} {percentage:>9.1f}%"
+        )
+
+
+def verify(db_path="experiments_malcolm.db"):
     if not os.path.exists(db_path):
         print(f"Error: Database file not found at {os.path.abspath(db_path)}")
         return
@@ -61,6 +109,11 @@ def verify(db_path=DB_PATH):
 
         existing_tables = [name for name in TABLES_TO_CHECK if table_exists(cur, name)]
         missing_tables = [name for name in TABLES_TO_CHECK if name not in existing_tables]
+
+        if all(table_exists(cur, table) for table in ["audio_trials", "audio_results", "audio_asr"]):
+            summarize_asr_results(cur)
+        else:
+            print("\nASR completion by project: skipped (required table missing)")
 
         print(f"Tables found: {len(existing_tables)} / {len(TABLES_TO_CHECK)}")
         if missing_tables:
@@ -178,5 +231,10 @@ def verify(db_path=DB_PATH):
             print("\nNo audio_asr rows found.")
 
 
+def main(argv):
+    del argv
+    verify(FLAGS.dbfile)
+
+
 if __name__ == "__main__":
-    verify()
+    app.run(main)
