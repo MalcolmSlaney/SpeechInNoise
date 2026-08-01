@@ -1174,11 +1174,25 @@
       }
     }
 
+    // Default Visible Columns requested by user
+    const DEFAULT_VISIBLE_COLUMNS = [
+      "results_reply_filename",
+      "trials_project",
+      "trials_answer",
+      "asr_gt_word_count",
+      "asr_correct_word_count",
+      "annotation_matches",
+      "asr_words",
+      "asr_matches",
+      "audiology_asr_matches"
+    ];
+
     // Initial Data Load
     async function initData() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const customCsvUrl = urlParams.get("csv");
+        const defaultUrl = "https://quicksin.stanford.edu/~mslaney/quicksin_results.csv";
 
         let csvContent = "";
         if (customCsvUrl) {
@@ -1189,13 +1203,21 @@
           state.dataSourceName = customCsvUrl;
         } else {
           try {
-            const res = await fetch('./data/quicksin.csv');
+            const res = await fetch(defaultUrl);
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
             csvContent = await res.text();
+            state.dataSourceName = defaultUrl;
           } catch (e) {
-            const res = await fetch('https://quicksin.manus.space/api/trpc/data.quicksin');
-            csvContent = await res.text();
+            console.warn("Primary remote CSV fetch failed/blocked, trying fallback...", e);
+            try {
+              const res = await fetch('/quicksin_results.csv');
+              csvContent = await res.text();
+            } catch (err2) {
+              const res = await fetch('https://quicksin.manus.space/api/trpc/data.quicksin');
+              csvContent = await res.text();
+            }
+            state.dataSourceName = defaultUrl;
           }
-          state.dataSourceName = "QuickSIN Results (Stanford)";
         }
 
         state.allRecords = parseCSV(csvContent);
@@ -1212,14 +1234,14 @@
       }
     }
 
-    // Initialize Column Visibility map - all columns visible by default
+    // Initialize Column Visibility map
     function initColumnVisibility() {
       if (state.allRecords.length === 0) return;
       const allKeys = Object.keys(state.allRecords[0]);
       
       const visibility = {};
       allKeys.forEach(key => {
-        visibility[key] = true;
+        visibility[key] = DEFAULT_VISIBLE_COLUMNS.includes(key);
       });
       state.columnVisibility = visibility;
       renderColumnToggles();
