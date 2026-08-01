@@ -744,7 +744,7 @@
 
       <div class="filter-group">
         <label class="checkbox-label">
-          <input type="checkbox" id="mismatchedOnlyCheck">
+          <input type="checkbox" id="mismatchedOnlyCheck" checked>
           <span>Mismatched Words Only</span>
         </label>
       </div>
@@ -935,7 +935,7 @@
         subject: "",
         project: "",
         snr: "",
-        mismatchedOnly: false
+        mismatchedOnly: true
       },
       columnVisibility: {},
       sortColumn: null,
@@ -1626,14 +1626,14 @@
           subject: "",
           project: "",
           snr: "",
-          mismatchedOnly: false
+          mismatchedOnly: true
         };
         document.getElementById("searchInput").value = "";
         document.getElementById("languageSelect").value = "";
         document.getElementById("subjectSelect").value = "";
         document.getElementById("projectSelect").value = "";
         document.getElementById("snrSelect").value = "";
-        document.getElementById("mismatchedOnlyCheck").checked = false;
+        document.getElementById("mismatchedOnlyCheck").checked = true;
 
         applyFilters(true);
         updateUI();
