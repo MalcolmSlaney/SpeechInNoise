@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickSIN Results Dashboard</title>
+  
+  <!-- Modern Typography Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Feather Icons -->
+  <script src="https://unpkg.com/feather-icons"></script>
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">
+        <i data-feather="bar-chart-2"></i>
+      </div>
+      <div class="brand-info">
+        <h1>QuickSIN Results Dashboard</h1>
+        <p>Speech Recognition & Speech-in-Noise Analytics</p>
+        <div id="sourceTag" class="source-tag">
+          <i data-feather="database" style="width: 12px; height: 12px;"></i>
+          <span id="sourceText">Source: QuickSIN Results (Stanford)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button id="themeToggleBtn" class="btn btn-outline btn-icon" title="Toggle Dark/Light Mode">
+        <i data-feather="moon"></i>
+      </button>
+      <button id="shareBtn" class="btn btn-outline">
+        <i data-feather="share-2"></i>
+        <span>Share</span>
+      </button>
+      <button id="loadCsvBtn" class="btn btn-primary">
+        <i data-feather="upload-cloud"></i>
+        <span>Load CSV</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="app-container">
+
+    <!-- Sidebar Filters -->
+    <aside class="sidebar">
+      <div class="filter-group">
+        <label for="searchInput">Search Data</label>
+        <div style="position: relative;">
+          <input type="text" id="searchInput" class="input-text" placeholder="Search keywords...">
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label for="languageSelect">Language</label>
+        <select id="languageSelect" class="select-input">
+          <option value="">All Languages</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="subjectSelect">Subject</label>
+        <select id="subjectSelect" class="select-input">
+          <option value="">All Subjects</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="projectSelect">Project</label>
+        <select id="projectSelect" class="select-input">
+          <option value="">All Projects</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="snrSelect">SNR Level (dB)</label>
+        <select id="snrSelect" class="select-input">
+          <option value="">All SNR Levels</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="mismatchedOnlyCheck">
+          <span>Mismatched Words Only</span>
+        </label>
+      </div>
+
+      <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0.5rem 0;">
+
+      <div class="filter-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem;">
+          <label>Visible Columns (<span id="visibleColCount">0</span>)</label>
+          <button id="resetColsBtn" class="btn btn-outline btn-sm" style="font-size: 0.7rem; padding: 0.1rem 0.4rem;">Reset</button>
+        </div>
+        <div id="columnTogglesContainer" class="columns-toggle-list">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <button id="clearFiltersBtn" class="btn btn-outline btn-sm" style="margin-top: 0.5rem;">
+        <i data-feather="rotate-ccw"></i>
+        <span>Clear All Filters</span>
+      </button>
+    </aside>
+
+    <!-- Content Area -->
+    <main class="content-area">
+
+      <!-- Summary Statistics Grid -->
+      <section class="stats-grid">
+        <div class="stat-card">
+          <div>
+            <div class="stat-value" id="statTotalRecords">0</div>
+            <div class="stat-label">Total Records</div>
+          </div>
+          <div class="stat-icon">
+            <i data-feather="file-text"></i>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div>
+            <div class="stat-value" id="statUniqueSubjects">0</div>
+            <div class="stat-label">Unique Subjects</div>
+          </div>
+          <div class="stat-icon" style="background-color: #ecfdf5; color: #10b981;">
+            <i data-feather="users"></i>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div>
+            <div class="stat-value" id="statProjects">0</div>
+            <div class="stat-label">Projects</div>
+          </div>
+          <div class="stat-icon" style="background-color: #fef3c7; color: #f59e0b;">
+            <i data-feather="folder"></i>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div>
+            <div class="stat-value" id="statLanguages">0</div>
+            <div class="stat-label">Languages</div>
+          </div>
+          <div class="stat-icon" style="background-color: #f3e8ff; color: #a855f7;">
+            <i data-feather="globe"></i>
+          </div>
+        </div>
+      </section>
+
+      <!-- Table Section -->
+      <section class="table-card">
+        <div class="table-header-bar">
+          <div>
+            <h2>Results Table</h2>
+            <span id="showingCount" style="font-size: 0.8rem; color: var(--text-muted);">Showing 0 records</span>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table id="resultsTable">
+            <thead>
+              <tr id="tableHeaderRow">
+                <!-- Dynamically Generated Th -->
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <!-- Dynamically Generated Rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Bar -->
+        <div class="pagination-bar">
+          <div id="paginationSummary" style="font-size: 0.85rem; color: var(--text-secondary);">
+            Showing 0 to 0 of 0
+          </div>
+          <div class="pagination-controls" id="paginationControls">
+            <!-- Dynamically generated page buttons -->
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Load CSV Modal -->
+  <div id="csvModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Load CSV Data</h3>
+        <button class="close-modal-btn" id="closeCsvModalBtn">&times;</button>
+      </div>
+      
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
+        <div class="filter-group">
+          <label for="csvUrlInput">Load from URL</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="csvUrlInput" class="input-text" placeholder="https://example.com/data.csv">
+            <button id="loadFromUrlBtn" class="btn btn-primary btn-sm">Load</button>
+          </div>
+        </div>
+
+        <div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; margin: 0.25rem 0;">— OR —</div>
+
+        <div class="filter-group">
+          <label>Upload File</label>
+          <div id="dropZone" style="border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; text-align: center; cursor: pointer; background: var(--bg-app);">
+            <i data-feather="upload" style="width: 28px; height: 28px; color: var(--text-muted); margin-bottom: 0.5rem;"></i>
+            <p style="font-size: 0.875rem; font-weight: 500;">Click to upload or drag & drop CSV file</p>
+            <input type="file" id="fileInput" accept=".csv" style="display: none;">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- JavaScript logic -->
+  <script src="app.js"></script>
+</body>
+</html>
