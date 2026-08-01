@@ -13,8 +13,661 @@
   <!-- Feather Icons -->
   <script src="https://unpkg.com/feather-icons"></script>
   
-  <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="styles.css">
+  <!-- Embedded Styles -->
+  <style>
+    /* Modern CSS Token System for QuickSIN Results Dashboard */
+    :root {
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'IBM Plex Mono', monospace;
+
+      /* Light Theme Palette */
+      --bg-app: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-muted: #f1f5f9;
+      --bg-accent: #eff6ff;
+      --border-color: #e2e8f0;
+      --border-accent: #cbd5e1;
+
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --text-inverse: #ffffff;
+
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --primary-light: #dbeafe;
+      --primary-text: #1d4ed8;
+
+      --success: #10b981;
+      --success-bg: #d1fae5;
+      --warning: #f59e0b;
+      --warning-bg: #fef3c7;
+      --danger: #ef4444;
+      --danger-bg: #fee2e2;
+
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+    }
+
+    [data-theme="dark"] {
+      --bg-app: #0b0f19;
+      --bg-card: #151c2c;
+      --bg-muted: #1e293b;
+      --bg-accent: #1e293b;
+      --border-color: #334155;
+      --border-accent: #475569;
+
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --text-inverse: #0f172a;
+
+      --primary: #60a5fa;
+      --primary-hover: #3b82f6;
+      --primary-light: #1e3a8a;
+      --primary-text: #93c5fd;
+
+      --success: #34d399;
+      --success-bg: #064e3b;
+      --warning: #fbbf24;
+      --warning-bg: #78350f;
+      --danger: #f87171;
+      --danger-bg: #7f1d1d;
+
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Reset & Global Styles */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-app);
+      color: var(--text-primary);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    /* App Header */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    [data-theme="dark"] .header {
+      background: rgba(21, 28, 44, 0.85);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, var(--primary), #8b5cf6);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .brand-info h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .brand-info p {
+      font-size: 0.825rem;
+      color: var(--text-muted);
+    }
+
+    .source-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.15rem 0.6rem;
+      border-radius: var(--radius-full);
+      background-color: var(--bg-muted);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-color);
+      margin-top: 0.2rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    /* Main Container Layout - 100% Full Width Expansion */
+    .app-container {
+      display: flex;
+      padding: 1.5rem;
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+    }
+
+    /* Sidebar Filter Panel */
+    .sidebar {
+      width: 300px;
+      flex-shrink: 0;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      max-height: calc(100vh - 110px);
+      position: sticky;
+      top: 90px;
+      overflow-y: auto;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .filter-group label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    /* Form Controls */
+    .input-text, .select-input {
+      width: 100%;
+      padding: 0.55rem 0.8rem;
+      font-size: 0.875rem;
+      font-family: inherit;
+      background-color: var(--bg-app);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .input-text:focus, .select-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      accent-color: var(--primary);
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Column Toggles list */
+    .columns-toggle-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      max-height: 240px;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+    }
+
+    .column-toggle-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.3rem 0.5rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      transition: background-color 0.15s ease;
+    }
+
+    .column-toggle-item:hover {
+      background-color: var(--bg-muted);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+    }
+
+    .btn-outline {
+      background-color: transparent;
+      border-color: var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .btn-outline:hover {
+      background-color: var(--bg-muted);
+      border-color: var(--border-accent);
+    }
+
+    .btn-sm {
+      padding: 0.35rem 0.7rem;
+      font-size: 0.8rem;
+    }
+
+    .btn-icon {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border-radius: var(--radius-sm);
+    }
+
+    /* Dashboard Content Area */
+    .content-area {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* Stats Cards Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .stat-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .stat-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .stat-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      background-color: var(--primary-light);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Data Table Container */
+    .table-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .table-header-bar {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: var(--bg-card);
+    }
+
+    .table-header-bar h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      width: 100%;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    th {
+      background-color: var(--bg-muted);
+      color: var(--text-secondary);
+      font-weight: 600;
+      padding: 0.75rem 1rem;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border-color);
+      user-select: none;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    th:hover {
+      background-color: var(--border-color);
+    }
+
+    th .th-content {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      transition: background-color 0.15s ease;
+    }
+
+    tbody tr:hover {
+      background-color: var(--bg-accent);
+    }
+
+    /* SPEAKER BUTTON IN SOUND FILE COLUMN */
+    .speaker-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: var(--radius-full);
+      background: var(--bg-muted);
+      border: 1px solid var(--border-color);
+      color: var(--primary);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .speaker-btn:hover {
+      background-color: var(--primary-light);
+      border-color: var(--primary);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
+    }
+
+    .speaker-btn.playing {
+      background-color: var(--primary);
+      color: white;
+      border-color: var(--primary-hover);
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+      animation: pulse-border 1.5s infinite;
+    }
+
+    @keyframes pulse-border {
+      0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+      70% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+    }
+
+    /* Animated Sound Wave Bars inside active speaker button */
+    .sound-wave {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 14px;
+    }
+
+    .sound-wave-bar {
+      width: 3px;
+      background-color: currentColor;
+      border-radius: 1px;
+      animation: wave-animation 1s infinite ease-in-out alternate;
+    }
+
+    .sound-wave-bar:nth-child(1) { height: 40%; animation-delay: 0.1s; }
+    .sound-wave-bar:nth-child(2) { height: 100%; animation-delay: 0.3s; }
+    .sound-wave-bar:nth-child(3) { height: 60%; animation-delay: 0.2s; }
+
+    @keyframes wave-animation {
+      0% { height: 20%; }
+      100% { height: 100%; }
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.15rem 0.55rem;
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .badge-snr {
+      background-color: #e0f2fe;
+      color: #0369a1;
+      font-family: var(--font-mono);
+    }
+
+    [data-theme="dark"] .badge-snr {
+      background-color: #0c4a6e;
+      color: #38bdf8;
+    }
+
+    /* Pagination Bar */
+    .pagination-bar {
+      padding: 0.9rem 1.25rem;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: var(--bg-card);
+    }
+
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .page-btn {
+      min-width: 32px;
+      height: 32px;
+      padding: 0 0.5rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+      background-color: transparent;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .page-btn.active {
+      background-color: var(--primary);
+      color: white;
+      border-color: var(--primary);
+      font-weight: 600;
+    }
+
+    .page-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Modal Dialog */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 500px;
+      padding: 1.5rem;
+      box-shadow: var(--shadow-lg);
+      transform: scale(0.95);
+      transition: transform 0.2s ease;
+    }
+
+    .modal-overlay.active .modal-card {
+      transform: scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .modal-header h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .close-modal-btn {
+      background: none;
+      border: none;
+      font-size: 1.25rem;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .toast {
+      background-color: var(--text-primary);
+      color: var(--bg-card);
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-md);
+      font-size: 0.875rem;
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes slide-up {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
 </head>
 <body>
 
@@ -229,7 +882,858 @@
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- JavaScript logic -->
-  <script src="app.js"></script>
+  <!-- Embedded JavaScript Application Logic -->
+  <script>
+    /**
+     * QuickSIN Results Dashboard - Single File Application Logic
+     */
+
+    // Column Label Mappings
+    const COLUMN_LABELS = {
+      results_id: "Results ID",
+      results_subject: "Subject",
+      results_trial: "Trial",
+      results_reply_filename: "Sound File",
+      results_time: "Results Time",
+      trials_id: "Trial ID",
+      trials_project: "Project",
+      trials_snr: "SNR",
+      trials_lang: "Language",
+      trials_level_number: "Level",
+      trials_trial_number: "Trial #",
+      trials_filename: "Filename",
+      trials_answer: "Answer",
+      trials_active: "Active",
+      user_id: "User ID",
+      user_name: "User Name",
+      user_ip: "User IP",
+      user_time: "User Time",
+      user_info_id: "User Info ID",
+      user_info_key: "Info Key",
+      user_info_value: "Info Value",
+      user_info_time: "Info Time",
+      asr_id: "ASR ID",
+      asr_results: "ASR Results",
+      asr_gt_word_count: "GT Word Count",
+      asr_correct_word_count: "Correct Word Count",
+      asr_clean_tokens: "Clean Tokens",
+      annotation_ref: "Annotation Ref",
+      annotation_matches: "Annotation Matches",
+      asr_words: "ASR Words",
+      asr_matches: "ASR Matches",
+      asr_times: "ASR Times",
+      audiology_asr_matches: "Audiology ASR Matches"
+    };
+
+    // App State
+    let state = {
+      allRecords: [],
+      filteredRecords: [],
+      filters: {
+        searchText: "",
+        language: "",
+        subject: "",
+        project: "",
+        snr: "",
+        mismatchedOnly: false
+      },
+      columnVisibility: {},
+      sortColumn: null,
+      sortOrder: "asc",
+      currentPage: 1,
+      pageSize: 50,
+      dataSourceName: "QuickSIN Results (Stanford)",
+      theme: localStorage.getItem("theme") || "light"
+    };
+
+    // Audio Controller for Sound File Speaker Column
+    const audioController = {
+      activeAudio: null,
+      activeBtn: null,
+      activeFilename: null,
+
+      stop() {
+        if (this.activeAudio) {
+          this.activeAudio.pause();
+          this.activeAudio = null;
+        }
+        if (window.speechSynthesis && window.speechSynthesis.speaking) {
+          window.speechSynthesis.cancel();
+        }
+        if (this.activeBtn) {
+          this.activeBtn.classList.remove("playing");
+          this.activeBtn.innerHTML = `
+            <i data-feather="volume-2" style="width: 16px; height: 16px;"></i>
+            <span>Play</span>
+          `;
+          feather.replace();
+          this.activeBtn = null;
+          this.activeFilename = null;
+        }
+      },
+
+      play(filename, btnElement, phraseFallback) {
+        if (this.activeFilename === filename && this.activeBtn === btnElement) {
+          this.stop();
+          return;
+        }
+
+        this.stop();
+
+        this.activeBtn = btnElement;
+        this.activeFilename = filename;
+
+        btnElement.classList.add("playing");
+        btnElement.innerHTML = `
+          <div class="sound-wave">
+            <div class="sound-wave-bar"></div>
+            <div class="sound-wave-bar"></div>
+            <div class="sound-wave-bar"></div>
+          </div>
+          <span>Playing</span>
+        `;
+
+        const audioUrl = `https://quicksin.manus.space/api/audio/${filename}`;
+        const audio = new Audio(audioUrl);
+        this.activeAudio = audio;
+
+        audio.onended = () => {
+          this.stop();
+        };
+
+        audio.onerror = () => {
+          this.fallbackSpeech(phraseFallback);
+        };
+
+        audio.play().catch(() => {
+          this.fallbackSpeech(phraseFallback);
+        });
+      },
+
+      fallbackSpeech(text) {
+        if (!window.speechSynthesis) {
+          showToast("Audio playback not available for this track");
+          this.stop();
+          return;
+        }
+        const speechText = text || "Audio sample playback";
+        const utterance = new SpeechSynthesisUtterance(speechText);
+        utterance.rate = 0.95;
+        
+        utterance.onend = () => {
+          this.stop();
+        };
+        utterance.onerror = () => {
+          this.stop();
+        };
+
+        window.speechSynthesis.speak(utterance);
+      }
+    };
+
+    // Robust CSV Parser
+    function parseCSV(csvText) {
+      const lines = csvText.split(/\r\n|\n/);
+      if (lines.length < 2) return [];
+
+      function parseRow(rowStr) {
+        const fields = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < rowStr.length; i++) {
+          const char = rowStr[i];
+          const nextChar = rowStr[i + 1];
+
+          if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+              current += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (char === ',' && !inQuotes) {
+            fields.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        fields.push(current.trim());
+        return fields;
+      }
+
+      const headers = parseRow(lines[0]);
+      const records = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const values = parseRow(line);
+        if (values.length < Math.max(1, headers.length - 5)) continue;
+
+        const rowObj = {};
+        headers.forEach((h, idx) => {
+          rowObj[h] = values[idx] || "";
+        });
+        records.push(rowObj);
+      }
+
+      return records;
+    }
+
+    // Helper to get user-friendly column label
+    function getColumnLabel(key) {
+      if (COLUMN_LABELS[key]) return COLUMN_LABELS[key];
+      return key
+        .replace(/^(results|trials|user|asr|annotation|audiology)_/, "")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    // Synchronize User Choices in URL Parameters in Real-Time
+    function updateURLState() {
+      const url = new URL(window.location.href);
+      const params = url.searchParams;
+
+      // Filter search
+      if (state.filters.searchText) params.set("search", state.filters.searchText);
+      else params.delete("search");
+
+      // Language filter
+      if (state.filters.language) params.set("lang", state.filters.language);
+      else params.delete("lang");
+
+      // Subject filter
+      if (state.filters.subject) params.set("subject", state.filters.subject);
+      else params.delete("subject");
+
+      // Project filter
+      if (state.filters.project) params.set("project", state.filters.project);
+      else params.delete("project");
+
+      // SNR filter
+      if (state.filters.snr) params.set("snr", state.filters.snr);
+      else params.delete("snr");
+
+      // Mismatched words filter
+      if (state.filters.mismatchedOnly) params.set("mismatched", "true");
+      else params.delete("mismatched");
+
+      // Page
+      if (state.currentPage > 1) params.set("page", state.currentPage);
+      else params.delete("page");
+
+      // Sorting
+      if (state.sortColumn) {
+        params.set("sort", state.sortColumn);
+        params.set("order", state.sortOrder);
+      } else {
+        params.delete("sort");
+        params.delete("order");
+      }
+
+      // Column visibility choices
+      const allKeys = state.allRecords.length > 0 ? Object.keys(state.allRecords[0]) : Object.keys(COLUMN_LABELS);
+      const activeCols = allKeys.filter(k => state.columnVisibility[k]);
+      if (activeCols.length < allKeys.length) {
+        params.set("cols", activeCols.join(","));
+      } else {
+        params.delete("cols");
+      }
+
+      history.replaceState(null, "", url.toString());
+    }
+
+    // Restore state from URL query parameters across reloads
+    function restoreStateFromURL() {
+      const params = new URLSearchParams(window.location.search);
+      
+      if (params.has("search")) state.filters.searchText = params.get("search");
+      if (params.has("lang")) state.filters.language = params.get("lang");
+      if (params.has("subject")) state.filters.subject = params.get("subject");
+      if (params.has("project")) state.filters.project = params.get("project");
+      if (params.has("snr")) state.filters.snr = params.get("snr");
+      if (params.has("mismatched")) state.filters.mismatchedOnly = params.get("mismatched") === "true";
+      if (params.has("page")) state.currentPage = parseInt(params.get("page"), 10) || 1;
+      if (params.has("sort")) {
+        state.sortColumn = params.get("sort");
+        state.sortOrder = params.get("order") === "desc" ? "desc" : "asc";
+      }
+
+      document.getElementById("searchInput").value = state.filters.searchText;
+      document.getElementById("mismatchedOnlyCheck").checked = state.filters.mismatchedOnly;
+
+      if (params.has("cols")) {
+        const visibleList = params.get("cols").split(",");
+        const allKeys = state.allRecords.length > 0 ? Object.keys(state.allRecords[0]) : Object.keys(COLUMN_LABELS);
+        allKeys.forEach(key => {
+          state.columnVisibility[key] = visibleList.includes(key);
+        });
+        renderColumnToggles();
+      }
+    }
+
+    // Initial Data Load
+    async function initData() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const customCsvUrl = urlParams.get("csv");
+
+        let csvContent = "";
+        if (customCsvUrl) {
+          showToast("Loading CSV from URL parameter...");
+          const res = await fetch(customCsvUrl);
+          if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+          csvContent = await res.text();
+          state.dataSourceName = customCsvUrl;
+        } else {
+          try {
+            const res = await fetch('./data/quicksin.csv');
+            csvContent = await res.text();
+          } catch (e) {
+            const res = await fetch('https://quicksin.manus.space/api/trpc/data.quicksin');
+            csvContent = await res.text();
+          }
+          state.dataSourceName = "QuickSIN Results (Stanford)";
+        }
+
+        state.allRecords = parseCSV(csvContent);
+        initColumnVisibility();
+        restoreStateFromURL();
+        populateDropdowns();
+        applyFilters(false);
+        updateUI();
+
+        document.getElementById("sourceText").textContent = `Source: ${state.dataSourceName}`;
+      } catch (err) {
+        console.error("Initialization error:", err);
+        showToast("Error loading dataset. Check console for details.");
+      }
+    }
+
+    // Initialize Column Visibility map - all columns visible by default
+    function initColumnVisibility() {
+      if (state.allRecords.length === 0) return;
+      const allKeys = Object.keys(state.allRecords[0]);
+      
+      const visibility = {};
+      allKeys.forEach(key => {
+        visibility[key] = true;
+      });
+      state.columnVisibility = visibility;
+      renderColumnToggles();
+    }
+
+    // Render Column Toggle checkboxes in sidebar
+    function renderColumnToggles() {
+      const container = document.getElementById("columnTogglesContainer");
+      if (!container) return;
+
+      const visibleKeys = Object.keys(state.columnVisibility);
+      const activeCount = visibleKeys.filter(k => state.columnVisibility[k]).length;
+      document.getElementById("visibleColCount").textContent = activeCount;
+
+      container.innerHTML = visibleKeys.map(key => {
+        const label = getColumnLabel(key);
+        const isChecked = state.columnVisibility[key] ? "checked" : "";
+        return `
+          <label class="column-toggle-item">
+            <span>${label}</span>
+            <input type="checkbox" data-col="${key}" ${isChecked}>
+          </label>
+        `;
+      }).join("");
+
+      container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener("change", (e) => {
+          const colKey = e.target.getAttribute("data-col");
+          state.columnVisibility[colKey] = e.target.checked;
+          document.getElementById("visibleColCount").textContent = 
+            Object.values(state.columnVisibility).filter(Boolean).length;
+          updateURLState();
+          renderTableHeader();
+          renderTableBody();
+        });
+      });
+    }
+
+    // Populate Filter Dropdowns
+    function populateDropdowns() {
+      const records = state.allRecords;
+      const langs = new Set();
+      const subjects = new Set();
+      const projects = new Set();
+      const snrs = new Set();
+
+      records.forEach(r => {
+        if (r.trials_lang) langs.add(r.trials_lang);
+        if (r.results_subject) subjects.add(r.results_subject);
+        if (r.trials_project) projects.add(r.trials_project);
+        if (r.trials_snr) snrs.add(r.trials_snr);
+      });
+
+      populateSelect("languageSelect", Array.from(langs).sort(), "All Languages");
+      populateSelect("subjectSelect", Array.from(subjects).sort((a,b) => Number(a)-Number(b)), "All Subjects");
+      populateSelect("projectSelect", Array.from(projects).sort(), "All Projects");
+      populateSelect("snrSelect", Array.from(snrs).sort((a,b) => Number(a)-Number(b)), "All SNR Levels");
+
+      if (state.filters.language) document.getElementById("languageSelect").value = state.filters.language;
+      if (state.filters.subject) document.getElementById("subjectSelect").value = state.filters.subject;
+      if (state.filters.project) document.getElementById("projectSelect").value = state.filters.project;
+      if (state.filters.snr) document.getElementById("snrSelect").value = state.filters.snr;
+    }
+
+    function populateSelect(elemId, items, placeholder) {
+      const sel = document.getElementById(elemId);
+      if (!sel) return;
+      sel.innerHTML = `<option value="">${placeholder}</option>` +
+        items.map(item => `<option value="${item}">${item}</option>`).join("");
+    }
+
+    // Apply Filters to Data
+    function applyFilters(resetPage = true) {
+      const { searchText, language, subject, project, snr, mismatchedOnly } = state.filters;
+      const sText = searchText.toLowerCase();
+
+      state.filteredRecords = state.allRecords.filter(r => {
+        if (language && r.trials_lang !== language) return false;
+        if (subject && r.results_subject !== subject) return false;
+        if (project && r.trials_project !== project) return false;
+        if (snr && r.trials_snr !== snr) return false;
+
+        if (mismatchedOnly) {
+          const correctCount = parseInt(r.asr_correct_word_count || "0", 10);
+          const gtCount = parseInt(r.asr_gt_word_count || "0", 10);
+          if (correctCount === gtCount) return false;
+        }
+
+        if (sText) {
+          const fullRowStr = Object.values(r).join(" ").toLowerCase();
+          if (!fullRowStr.includes(sText)) return false;
+        }
+
+        return true;
+      });
+
+      if (state.sortColumn) {
+        const col = state.sortColumn;
+        const order = state.sortOrder === "asc" ? 1 : -1;
+        state.filteredRecords.sort((a, b) => {
+          const valA = a[col] || "";
+          const valB = b[col] || "";
+          const numA = parseFloat(valA);
+          const numB = parseFloat(valB);
+
+          if (!isNaN(numA) && !isNaN(numB)) {
+            return (numA - numB) * order;
+          }
+          return valA.localeCompare(valB) * order;
+        });
+      }
+
+      if (resetPage) {
+        state.currentPage = 1;
+      }
+
+      updateURLState();
+    }
+
+    // Update UI Elements
+    function updateUI() {
+      renderStatCards();
+      renderTableHeader();
+      renderTableBody();
+      renderPagination();
+      feather.replace();
+    }
+
+    // Render Summary Statistics Cards
+    function renderStatCards() {
+      const total = state.filteredRecords.length;
+      const subjects = new Set(state.filteredRecords.map(r => r.results_subject).filter(Boolean)).size;
+      const projects = new Set(state.filteredRecords.map(r => r.trials_project).filter(Boolean)).size;
+      const languages = new Set(state.filteredRecords.map(r => r.trials_lang).filter(Boolean)).size;
+
+      document.getElementById("statTotalRecords").textContent = total.toLocaleString();
+      document.getElementById("statUniqueSubjects").textContent = subjects.toLocaleString();
+      document.getElementById("statProjects").textContent = projects.toLocaleString();
+      document.getElementById("statLanguages").textContent = languages.toLocaleString();
+    }
+
+    // Render Table Header
+    function renderTableHeader() {
+      const headerRow = document.getElementById("tableHeaderRow");
+      if (!headerRow) return;
+
+      const activeCols = Object.keys(state.columnVisibility).filter(k => state.columnVisibility[k]);
+      
+      headerRow.innerHTML = activeCols.map(colKey => {
+        const label = getColumnLabel(colKey);
+        const isSorted = state.sortColumn === colKey;
+        const sortIcon = isSorted ? (state.sortOrder === "asc" ? "chevron-up" : "chevron-down") : "minus";
+        
+        return `
+          <th data-col="${colKey}">
+            <div class="th-content">
+              <span>${label}</span>
+              ${isSorted ? `<i data-feather="${sortIcon}" style="width: 14px; height: 14px; color: var(--primary);"></i>` : ''}
+            </div>
+          </th>
+        `;
+      }).join("");
+
+      headerRow.querySelectorAll("th").forEach(th => {
+        th.addEventListener("click", () => {
+          const colKey = th.getAttribute("data-col");
+          if (state.sortColumn === colKey) {
+            state.sortOrder = state.sortOrder === "asc" ? "desc" : "asc";
+          } else {
+            state.sortColumn = colKey;
+            state.sortOrder = "asc";
+          }
+          applyFilters(false);
+          updateUI();
+        });
+      });
+
+      feather.replace();
+    }
+
+    // Render Table Body
+    function renderTableBody() {
+      const tbody = document.getElementById("tableBody");
+      if (!tbody) return;
+
+      const activeCols = Object.keys(state.columnVisibility).filter(k => state.columnVisibility[k]);
+      const startIdx = (state.currentPage - 1) * state.pageSize;
+      const endIdx = startIdx + state.pageSize;
+      const pageRecords = state.filteredRecords.slice(startIdx, endIdx);
+
+      if (pageRecords.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="${activeCols.length}" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+              No records match your filters
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = pageRecords.map((r, rowIdx) => {
+        const cells = activeCols.map(colKey => {
+          const val = r[colKey] || "";
+
+          if (colKey === "results_reply_filename") {
+            const audioFile = val || r.trials_filename || "";
+            const targetPhrase = r.trials_answer || r.asr_results || "";
+            
+            return `
+              <td>
+                <button class="speaker-btn" data-filename="${audioFile}" data-phrase="${targetPhrase.replace(/"/g, '&quot;')}">
+                  <i data-feather="volume-2" style="width: 16px; height: 16px;"></i>
+                  <span>Play</span>
+                </button>
+              </td>
+            `;
+          }
+
+          if (colKey === "trials_snr") {
+            return `<td><span class="badge badge-snr">${val} dB</span></td>`;
+          }
+
+          if (val.length > 75) {
+            const truncated = val.substring(0, 75) + "…";
+            return `<td><span title="${val.replace(/"/g, '&quot;')}">${truncated}</span></td>`;
+          }
+
+          return `<td>${val}</td>`;
+        }).join("");
+
+        return `<tr>${cells}</tr>`;
+      }).join("");
+
+      tbody.querySelectorAll(".speaker-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const filename = btn.getAttribute("data-filename");
+          const phrase = btn.getAttribute("data-phrase");
+          audioController.play(filename, btn, phrase);
+        });
+      });
+
+      feather.replace();
+    }
+
+    // Render Pagination Controls
+    function renderPagination() {
+      const total = state.filteredRecords.length;
+      const start = total === 0 ? 0 : (state.currentPage - 1) * state.pageSize + 1;
+      const end = Math.min(state.currentPage * state.pageSize, total);
+
+      document.getElementById("showingCount").textContent = `Showing ${total} records`;
+      document.getElementById("paginationSummary").textContent = `Showing ${start} to ${end} of ${total}`;
+
+      const totalPages = Math.ceil(total / state.pageSize) || 1;
+      const controlsContainer = document.getElementById("paginationControls");
+      if (!controlsContainer) return;
+
+      let btnsHtml = `
+        <button class="page-btn" id="prevPageBtn" ${state.currentPage === 1 ? "disabled" : ""}>
+          <i data-feather="chevron-left" style="width: 16px; height: 16px;"></i>
+        </button>
+      `;
+
+      let startPage = Math.max(1, state.currentPage - 2);
+      let endPage = Math.min(totalPages, startPage + 4);
+      if (endPage - startPage < 4) {
+        startPage = Math.max(1, endPage - 4);
+      }
+
+      for (let p = startPage; p <= endPage; p++) {
+        btnsHtml += `
+          <button class="page-btn ${p === state.currentPage ? 'active' : ''}" data-page="${p}">
+            ${p}
+          </button>
+        `;
+      }
+
+      btnsHtml += `
+        <button class="page-btn" id="nextPageBtn" ${state.currentPage === totalPages ? "disabled" : ""}>
+          <i data-feather="chevron-right" style="width: 16px; height: 16px;"></i>
+        </button>
+      `;
+
+      controlsContainer.innerHTML = btnsHtml;
+
+      controlsContainer.querySelectorAll(".page-btn[data-page]").forEach(b => {
+        b.addEventListener("click", () => {
+          state.currentPage = parseInt(b.getAttribute("data-page"), 10);
+          updateURLState();
+          updateUI();
+        });
+      });
+
+      const prevBtn = document.getElementById("prevPageBtn");
+      if (prevBtn) {
+        prevBtn.addEventListener("click", () => {
+          if (state.currentPage > 1) {
+            state.currentPage--;
+            updateURLState();
+            updateUI();
+          }
+        });
+      }
+
+      const nextBtn = document.getElementById("nextPageBtn");
+      if (nextBtn) {
+        nextBtn.addEventListener("click", () => {
+          if (state.currentPage < totalPages) {
+            state.currentPage++;
+            updateURLState();
+            updateUI();
+          }
+        });
+      }
+
+      feather.replace();
+    }
+
+    // Toast Notifications
+    function showToast(message) {
+      const container = document.getElementById("toastContainer");
+      if (!container) return;
+
+      const toast = document.createElement("div");
+      toast.className = "toast";
+      toast.innerHTML = `<i data-feather="check-circle" style="width: 16px; height: 16px;"></i><span>${message}</span>`;
+      container.appendChild(toast);
+      feather.replace();
+
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    // Event Listeners Setup
+    function setupEventListeners() {
+      // Search input
+      document.getElementById("searchInput").addEventListener("input", (e) => {
+        state.filters.searchText = e.target.value;
+        applyFilters(true);
+        updateUI();
+      });
+
+      // Dropdown filters
+      document.getElementById("languageSelect").addEventListener("change", (e) => {
+        state.filters.language = e.target.value;
+        applyFilters(true);
+        updateUI();
+      });
+
+      document.getElementById("subjectSelect").addEventListener("change", (e) => {
+        state.filters.subject = e.target.value;
+        applyFilters(true);
+        updateUI();
+      });
+
+      document.getElementById("projectSelect").addEventListener("change", (e) => {
+        state.filters.project = e.target.value;
+        applyFilters(true);
+        updateUI();
+      });
+
+      document.getElementById("snrSelect").addEventListener("change", (e) => {
+        state.filters.snr = e.target.value;
+        applyFilters(true);
+        updateUI();
+      });
+
+      document.getElementById("mismatchedOnlyCheck").addEventListener("change", (e) => {
+        state.filters.mismatchedOnly = e.target.checked;
+        applyFilters(true);
+        updateUI();
+      });
+
+      // Clear all filters
+      document.getElementById("clearFiltersBtn").addEventListener("click", () => {
+        state.filters = {
+          searchText: "",
+          language: "",
+          subject: "",
+          project: "",
+          snr: "",
+          mismatchedOnly: false
+        };
+        document.getElementById("searchInput").value = "";
+        document.getElementById("languageSelect").value = "";
+        document.getElementById("subjectSelect").value = "";
+        document.getElementById("projectSelect").value = "";
+        document.getElementById("snrSelect").value = "";
+        document.getElementById("mismatchedOnlyCheck").checked = false;
+
+        applyFilters(true);
+        updateUI();
+      });
+
+      // Reset columns to all visible
+      document.getElementById("resetColsBtn").addEventListener("click", () => {
+        initColumnVisibility();
+        updateURLState();
+        renderTableHeader();
+        renderTableBody();
+      });
+
+      // Theme Toggle
+      document.getElementById("themeToggleBtn").addEventListener("click", () => {
+        state.theme = state.theme === "light" ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", state.theme);
+        localStorage.setItem("theme", state.theme);
+        
+        const icon = document.querySelector("#themeToggleBtn i");
+        if (icon) {
+          icon.setAttribute("data-feather", state.theme === "light" ? "moon" : "sun");
+          feather.replace();
+        }
+      });
+
+      // Set initial theme
+      document.documentElement.setAttribute("data-theme", state.theme);
+
+      // Share Button
+      document.getElementById("shareBtn").addEventListener("click", () => {
+        updateURLState();
+        navigator.clipboard.writeText(window.location.href).then(() => {
+          showToast("Dashboard URL copied to clipboard!");
+        }).catch(() => {
+          showToast("Failed to copy URL to clipboard");
+        });
+      });
+
+      // Load CSV Modal
+      const modal = document.getElementById("csvModal");
+      document.getElementById("loadCsvBtn").addEventListener("click", () => {
+        modal.classList.add("active");
+      });
+      document.getElementById("closeCsvModalBtn").addEventListener("click", () => {
+        modal.classList.remove("active");
+      });
+
+      // Load CSV from URL
+      document.getElementById("loadFromUrlBtn").addEventListener("click", async () => {
+        const urlInput = document.getElementById("csvUrlInput").value.trim();
+        if (!urlInput) return;
+
+        try {
+          showToast("Fetching CSV from URL...");
+          const res = await fetch(urlInput);
+          if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+          const text = await res.text();
+          state.allRecords = parseCSV(text);
+          state.dataSourceName = urlInput;
+          document.getElementById("sourceText").textContent = `Source: ${urlInput}`;
+          initColumnVisibility();
+          populateDropdowns();
+          applyFilters(true);
+          updateUI();
+          modal.classList.remove("active");
+          showToast("CSV data loaded successfully!");
+        } catch (err) {
+          showToast("Failed to fetch URL directly (CORS). Use file upload or local file.");
+        }
+      });
+
+      // File Upload / Dropzone
+      const dropZone = document.getElementById("dropZone");
+      const fileInput = document.getElementById("fileInput");
+
+      dropZone.addEventListener("click", () => fileInput.click());
+
+      fileInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) handleFile(file);
+      });
+
+      dropZone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = "var(--primary)";
+      });
+
+      dropZone.addEventListener("dragleave", () => {
+        dropZone.style.borderColor = "var(--border-color)";
+      });
+
+      dropZone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = "var(--border-color)";
+        const file = e.dataTransfer.files[0];
+        if (file) handleFile(file);
+      });
+
+      function handleFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target.result;
+          state.allRecords = parseCSV(content);
+          state.dataSourceName = `File: ${file.name}`;
+          document.getElementById("sourceText").textContent = `Source: ${state.dataSourceName}`;
+          initColumnVisibility();
+          populateDropdowns();
+          applyFilters(true);
+          updateUI();
+          modal.classList.remove("active");
+          showToast(`Loaded ${file.name} successfully!`);
+        };
+        reader.readAsText(file);
+      }
+    }
+
+    // Start application on DOM ready
+    document.addEventListener("DOMContentLoaded", () => {
+      setupEventListeners();
+      initData();
+    });
+  </script>
 </body>
 </html>
