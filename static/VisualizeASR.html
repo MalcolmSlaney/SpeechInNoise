@@ -1197,27 +1197,48 @@
         let csvContent = "";
         if (customCsvUrl) {
           showToast("Loading CSV from URL parameter...");
-          const res = await fetch(customCsvUrl);
-          if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-          csvContent = await res.text();
-          state.dataSourceName = customCsvUrl;
-        } else {
           try {
-            const res = await fetch(defaultUrl);
+            const res = await fetch(customCsvUrl);
             if (!res.ok) throw new Error(`HTTP error ${res.status}`);
             csvContent = await res.text();
-            state.dataSourceName = defaultUrl;
           } catch (e) {
-            console.warn("Primary remote CSV fetch failed/blocked, trying fallback...", e);
-            try {
-              const res = await fetch('/quicksin_results.csv');
-              csvContent = await res.text();
-            } catch (err2) {
-              const res = await fetch('https://quicksin.manus.space/api/trpc/data.quicksin');
-              csvContent = await res.text();
-            }
-            state.dataSourceName = defaultUrl;
+            const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(customCsvUrl);
+            const res = await fetch(proxyUrl);
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+            csvContent = await res.text();
           }
+          state.dataSourceName = customCsvUrl;
+        } else {
+          let loaded = false;
+          const urlsToTry = [
+            defaultUrl,
+            "https://api.allorigins.win/raw?url=" + encodeURIComponent(defaultUrl),
+            "../quicksin_results.csv",
+            "./quicksin_results.csv",
+            "/quicksin_results.csv",
+            "https://quicksin.manus.space/api/trpc/data.quicksin"
+          ];
+
+          for (const targetUrl of urlsToTry) {
+            try {
+              const res = await fetch(targetUrl);
+              if (res.ok) {
+                const text = await res.text();
+                if (text && text.includes("results_reply_filename")) {
+                  csvContent = text;
+                  loaded = true;
+                  break;
+                }
+              }
+            } catch (e) {
+              // Try next fallback URL
+            }
+          }
+
+          if (!loaded || !csvContent) {
+            throw new Error("Could not fetch CSV dataset from any endpoint");
+          }
+          state.dataSourceName = defaultUrl;
         }
 
         state.allRecords = parseCSV(csvContent);
@@ -1230,7 +1251,7 @@
         document.getElementById("sourceText").textContent = `Source: ${state.dataSourceName}`;
       } catch (err) {
         console.error("Initialization error:", err);
-        showToast("Error loading dataset. Check console for details.");
+        showToast("Error loading dataset. Check console or use Load CSV to select a file.");
       }
     }
 
@@ -1689,9 +1710,18 @@
 
         try {
           showToast("Fetching CSV from URL...");
-          const res = await fetch(urlInput);
-          if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-          const text = await res.text();
+          let text = "";
+          try {
+            const res = await fetch(urlInput);
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+            text = await res.text();
+          } catch (e) {
+            const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(urlInput);
+            const res = await fetch(proxyUrl);
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+            text = await res.text();
+          }
+
           state.allRecords = parseCSV(text);
           state.dataSourceName = urlInput;
           document.getElementById("sourceText").textContent = `Source: ${urlInput}`;
@@ -1702,7 +1732,7 @@
           modal.classList.remove("active");
           showToast("CSV data loaded successfully!");
         } catch (err) {
-          showToast("Failed to fetch URL directly (CORS). Use file upload or local file.");
+          showToast("Failed to fetch URL. Try local file drag & drop.");
         }
       });
 
