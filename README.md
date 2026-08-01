@@ -1,4 +1,35 @@
 ## Useful commands
+
+### Summarize rater scores
+
+`summarize_raters.py` reads `audio_results`, `audio_trials`, `audio_asr`,
+`audio_annotations`, and `review_annotations` from SQLite. It keeps every
+subject whose username fully matches `--subject_pattern` (by default
+`A\d+[SP]\d+`) and is not in `--excluded_subjects` (which defaults to `A2P2`),
+provided it has a trial matching `--language` and `--project`, non-empty ASR
+data, and non-empty reviewer data in `review_annotations.data`. Audiologist
+data is optional because it is a left join; when `audio_annotations.data` is
+missing, that trial contributes a zero audiologist true fraction.
+
+For each kept trial, ASR words are compared with the trial answer using
+`homonym_list.csv` and slash-separated answer alternatives. The program then
+groups trials by subject, project, and SNR. Each CSV row and each scatter-plot
+point is one such group, not one rater. Values are averaged across its trial
+rows; if multiple reraters scored the same audio, their review records are
+combined into the same group rather than producing separate dots:
+
+* audiologist true fraction from `audio_annotations.data`;
+* rerater true fraction from `review_annotations.data`; and
+* ASR matched-word count normalized by `--max_words` (5 by default).
+
+The three plot panels compare audiologist versus rerater fractions, normalized
+ASR versus audiologist fraction, and normalized ASR versus rerater fraction.
+
+Example:
+```bash
+python3 summarize_raters.py --dbfile experiments_emily.db --project quick
+```
+
 Deploy server and detach process from the appropriate folder path.
 ```bash
 conda activate quicksin # Or whatever environment you use
