@@ -70,6 +70,11 @@ flags.DEFINE_integer(
     5,
     "Maximum number of words used to normalize ASR matches.",
 )
+flags.DEFINE_bool(
+    "per_trial",
+    False,
+    "Show results for each trial instead of aggregated by subject/project/SNR.",
+)
 
 
 def read_homonyms(filename: str) -> Dict[str, Set[str]]:
@@ -182,8 +187,30 @@ def fetch_trials(
     ]
 
 
-def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]]) -> List[Dict[str, Any]]:
-    """Aggregate trial metrics by user, project, and SNR."""
+def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], per_trial: bool = False) -> List[Dict[str, Any]]:
+    """Aggregate trial metrics by user, project, and SNR, or return per-trial if per_trial=True."""
+    if per_trial:
+        # Return one entry per trial without aggregation
+        summary = []
+        for row in rows:
+            audio_fraction = fraction_true(row["audio_annotation_data"])
+            review_fraction = fraction_true(row["review_annotation_data"])
+            matched_words = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
+            summary.append(
+                {
+                    "user": row["user"],
+                    "project": row["project"],
+                    "snr": row["snr"],
+                    "records": 1,
+                    "mean_fraction_audio_annotation_true": audio_fraction,
+                    "mean_fraction_review_annotation_true": review_fraction,
+                    "average_matched_word_count": matched_words,
+                    "normalized_matched_word_count": matched_words / FLAGS.max_words,
+                }
+            )
+        return summary
+    
+    # Original aggregation by (user, project, snr)
     groups: Dict[Tuple[Any, str, Any], List[Tuple[float, float, int]]] = defaultdict(list)
     for row in rows:
         groups[(row["user"], row["project"], row["snr"])].append(
@@ -259,7 +286,19 @@ def print_statistics(summary: List[Dict[str, Any]]) -> None:
 
 
 def fit_regression(x: List[float], y: List[float], fixed_slope: Optional[float] = None) -> Tuple[float, float]:
-    """Return slope and intercept for a full or fixed-slope linear fit."""
+    """Return slope and intercept for a full or fixed-slope linear fit.
+    
+    Uses two algorithms depending on whether a fixed slope is provided:
+    
+    1. Fixed-slope fit (when fixed_slope is provided):
+       Calculates intercept as the average of residuals:
+       intercept = mean(y - fixed_slope * x)
+       Used for perfect agreement line (slope=1).
+    
+    2. Ordinary Least Squares (OLS) fit (when fixed_slope is None):
+       Computes slope = cov(x,y) / var(x) and intercept = mean(y) - slope * mean(x).
+       Standard linear regression without external dependencies.
+    """
     if fixed_slope is not None:
         return fixed_slope, sum(y_i - fixed_slope * x_i for x_i, y_i in zip(x, y)) / len(y)
 
@@ -302,7 +341,7 @@ def add_fit_line(axis, x: List[float], y: List[float], slope: float, bias: float
 
 def scatter_plot(axis, summary: List[Dict[str, Any]], x_key: str, y_key: str,
                  x_label: str, y_label: str, marker_size: float = 50,
-                 alpha: float = 0.7) -> None:
+                 alpha: float = 0.7, title_suffix: str = "") -> None:
     """Plot one comparison with full and slope-one regression fits."""
     x = [row[x_key] for row in summary]
     y = [row[y_key] for row in summary]
@@ -315,31 +354,38 @@ def scatter_plot(axis, summary: List[Dict[str, Any]], x_key: str, y_key: str,
     add_fit_line(axis, x, y, fixed_slope, fixed_bias, ":", -label_offset)
     axis.set_xlabel(x_label)
     axis.set_ylabel(y_label)
+    if title_suffix:
+        axis.set_title(f"{x_label} vs {y_label}\n({title_suffix})")
     axis.grid(True, linestyle="--", alpha=0.6)
 
 
-def create_plot(summary: List[Dict[str, Any]]) -> None:
+def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
     """Create the notebook's three-panel scatter plot."""
     import matplotlib.pyplot as plt
 
     figure, axes = plt.subplots(1, 3, figsize=(12, 4))
+    aggregation_label = "Per Trial" if per_trial else "Subject/Project/SNR Aggregates"
+    
     scatter_plot(
         axes[0], summary,
         "mean_fraction_audio_annotation_true",
         "mean_fraction_review_annotation_true",
         "Audiologist", "Reraters", marker_size=50, alpha=0.7,
+        title_suffix=aggregation_label,
     )
     scatter_plot(
         axes[1], summary,
         "normalized_matched_word_count",
         "mean_fraction_audio_annotation_true",
         "ASR", "Audiologist", marker_size=50, alpha=0.7,
+        title_suffix=aggregation_label,
     )
     scatter_plot(
         axes[2], summary,
         "normalized_matched_word_count",
         "mean_fraction_review_annotation_true",
         "ASR", "Reraters", marker_size=50, alpha=0.7,
+        title_suffix=aggregation_label,
     )
     figure.tight_layout()
     figure.savefig(FLAGS.plot, dpi=150)
@@ -356,12 +402,12 @@ def main(argv: List[str]) -> None:
         FLAGS.subject_pattern,
         FLAGS.excluded_subjects,
     )
-    summary = summarize(rows, homonyms)
+    summary = summarize(rows, homonyms, per_trial=FLAGS.per_trial)
     write_csv(summary)
     print_statistics(summary)
     print(f"Wrote summary to {FLAGS.output}")
     if summary and not FLAGS.no_plot:
-        create_plot(summary)
+        create_plot(summary, per_trial=FLAGS.per_trial)
 
 
 if __name__ == "__main__":
