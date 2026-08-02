@@ -75,6 +75,11 @@ flags.DEFINE_bool(
     False,
     "Show results for each trial instead of aggregated by subject/project/SNR.",
 )
+flags.DEFINE_float(
+    "alpha",
+    0.7,
+    "Opaqueness (alpha) of scatter plot dots. Range: 0.0 (transparent) to 1.0 (opaque).",
+)
 
 
 def read_homonyms(filename: str) -> Dict[str, Set[str]]:
@@ -370,21 +375,21 @@ def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
         axes[0], summary,
         "mean_fraction_audio_annotation_true",
         "mean_fraction_review_annotation_true",
-        "Audiologist", "Reraters", marker_size=50, alpha=0.7,
+        "Audiologist", "Reraters", marker_size=50, alpha=FLAGS.alpha,
         title_suffix=aggregation_label,
     )
     scatter_plot(
         axes[1], summary,
         "normalized_matched_word_count",
         "mean_fraction_audio_annotation_true",
-        "ASR", "Audiologist", marker_size=50, alpha=0.7,
+        "ASR", "Audiologist", marker_size=50, alpha=FLAGS.alpha,
         title_suffix=aggregation_label,
     )
     scatter_plot(
         axes[2], summary,
         "normalized_matched_word_count",
         "mean_fraction_review_annotation_true",
-        "ASR", "Reraters", marker_size=50, alpha=0.7,
+        "ASR", "Reraters", marker_size=50, alpha=FLAGS.alpha,
         title_suffix=aggregation_label,
     )
     figure.tight_layout()
