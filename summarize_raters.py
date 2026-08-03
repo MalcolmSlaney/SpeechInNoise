@@ -86,10 +86,31 @@ flags.DEFINE_string(
     "metadata/professional_raters.txt",
     "Path to file with valid professional rater usernames (one per line).",
 )
+flags.DEFINE_string(
+    "student_raters",
+    "metadata/student_raters.txt",
+    "Path to file with valid student rater usernames (one per line).",
+)
+flags.DEFINE_enum(
+    "rater_type",
+    "all",
+    ["all", "professional", "student"],
+    "Which raters to include: all, professional (from --professional_raters), or student (from --student_raters).",
+)
 
 
 def read_professional_raters(filename: str) -> Set[str]:
-    """Read professional rater usernames from a file (one per line, comments ignored)."""
+    """Read rater usernames from a text file, ignoring comments and blank lines.
+
+    Args:
+        filename: Path to a text file with one username per line. Lines starting
+            with ``#`` or containing only whitespace are ignored. If the file
+            does not exist, an empty set is returned so that all raters are
+            allowed.
+
+    Returns:
+        Set of username strings read from the file.
+    """
     raters: Set[str] = set()
     try:
         with open(filename, "r", encoding="utf-8") as file:
@@ -103,7 +124,19 @@ def read_professional_raters(filename: str) -> Set[str]:
 
 
 def read_homonyms(filename: str) -> Dict[str, Set[str]]:
-    """Read comma-separated, bidirectional homonym groups."""
+    """Read comma-separated homonym groups and build a bidirectional lookup table.
+
+    Each non-comment line contains a comma-separated group of words that are
+    considered phonetically equivalent. The returned mapping allows looking up
+    any word to find all its homonyms (excluding itself).
+
+    Args:
+        filename: Path to the CSV homonym file. Lines starting with ``#`` or
+            containing only whitespace are ignored.
+
+    Returns:
+        Dict mapping each word to the set of its homonyms.
+    """
     homonyms: Dict[str, Set[str]] = {}
     with open(filename, "r", encoding="utf-8") as file:
         for line in file:
@@ -118,7 +151,19 @@ def read_homonyms(filename: str) -> Dict[str, Set[str]]:
 
 
 def extract_asr_words(asr_data: str) -> List[str]:
-    """Extract lowercase words from a JSON-encoded Whisper result."""
+    """Extract lowercase words from a JSON-encoded Whisper ASR result.
+
+    Parses the ``text`` field of the JSON object produced by Whisper and
+    tokenizes it into individual word tokens.
+
+    Args:
+        asr_data: JSON string containing at minimum a ``text`` key with the
+            ASR transcript. Returns an empty list if the string is empty,
+            invalid JSON, or missing the ``text`` key.
+
+    Returns:
+        List of lowercase word tokens (letters, digits, and apostrophes only).
+    """
     if not asr_data:
         return []
     try:
@@ -129,7 +174,21 @@ def extract_asr_words(asr_data: str) -> List[str]:
 
 
 def score_trial(answer: str, asr_words: Iterable[str], homonyms: Dict[str, Set[str]]) -> int:
-    """Return the number of distinct answer items recognized by the ASR."""
+    """Count the number of distinct answer items recognized by the ASR.
+
+    Each item in ``answer`` is a space-separated token that may contain
+    slash-separated alternatives (e.g. ``'can/could'``). An item is counted as
+    matched if any of its alternatives, their homonyms, or their
+    apostrophe-stripped forms appear in the ASR word set.
+
+    Args:
+        answer: Ground-truth answer string with space-separated keyword items.
+        asr_words: Iterable of words recognized by the ASR system.
+        homonyms: Bidirectional homonym map as returned by :func:`read_homonyms`.
+
+    Returns:
+        Number of distinct answer items that were matched.
+    """
     asr_word_set = set(asr_words)
     answer_items = re.findall(r"\b[a-zA-Z/0-9']+\b", (answer or "").lower())
     matched_items: Set[str] = set()
@@ -149,7 +208,20 @@ def score_trial(answer: str, asr_words: Iterable[str], homonyms: Dict[str, Set[s
 
 
 def fraction_true(data: str) -> float:
-    """Return the fraction of true values in a JSON or list-like value."""
+    """Return the fraction of ``true`` values in a JSON or comma-separated list.
+
+    Accepts annotation data stored either as a JSON array (e.g.
+    ``'[true, false, true]'``) or as a plain comma-separated string. The
+    comparison is case-insensitive.
+
+    Args:
+        data: Encoded list of boolean-like values. Returns ``0.0`` for empty
+            or ``'[]'`` inputs.
+
+    Returns:
+        Fraction of values that equal ``'true'``, or ``0.0`` if the list is
+        empty or unparseable.
+    """
     if not data or data == "[]":
         return 0.0
     try:
@@ -162,7 +234,19 @@ def fraction_true(data: str) -> float:
 
 
 def is_valid_subject(username: str, subject_pattern: str, excluded_subjects: Iterable[str]) -> bool:
-    """Return whether a subject username is valid and not explicitly excluded."""
+    """Return whether a subject username passes the validity filter.
+
+    A username is valid if it is not ``None``, fully matches ``subject_pattern``
+    via :func:`re.fullmatch`, and is not in ``excluded_subjects``.
+
+    Args:
+        username: Username string from the ``users`` table.
+        subject_pattern: Regular expression that must match the entire username.
+        excluded_subjects: Iterable of usernames to reject regardless of pattern.
+
+    Returns:
+        ``True`` if the username is valid; ``False`` otherwise.
+    """
     return (
         username is not None
         and re.fullmatch(subject_pattern, username) is not None
@@ -176,9 +260,32 @@ def fetch_trials(
     project: str,
     subject_pattern: str,
     excluded_subjects: Iterable[str],
-    professional_raters: Set[str],
+    allowed_raters: Set[str],
 ) -> List[sqlite3.Row]:
-    """Fetch valid-subject trials with computed ASR and reviewer annotations from valid raters."""
+    """Fetch trials from the database, filtered by subject and rater validity.
+
+    Queries ``audio_results`` joined with ``audio_trials``, ``users``,
+    ``audio_annotations`` (left join), ``review_annotations``,
+    ``audio_asr`` (left join), filtering to rows with non-empty ASR and review
+    annotation data for the given language and project. Rows are then
+    post-filtered to valid subjects and allowed raters.
+
+    Args:
+        dbfile: Path to the SQLite database file.
+        language: Value of ``audio_trials.lang`` to include.
+        project: Value of ``audio_trials.project`` to include.
+        subject_pattern: Regex passed to :func:`is_valid_subject` for subject
+            username validation.
+        excluded_subjects: Usernames to reject regardless of pattern match.
+        allowed_raters: Set of labeler usernames to accept. An empty set means
+            all raters are allowed.
+
+    Returns:
+        List of :class:`sqlite3.Row` objects with columns: ``user``,
+        ``username``, ``project``, ``snr``, ``answer``,
+        ``audio_annotation_data``, ``review_annotation_data``,
+        ``audio_asr_data``, ``labeler_username``.
+    """
     subject_regex = re.compile(subject_pattern)
     excluded = set(excluded_subjects)
     with sqlite3.connect(dbfile) as connection:
@@ -213,13 +320,31 @@ def fetch_trials(
     valid_rows = []
     for row in rows:
         if is_valid_subject(row["username"], subject_regex.pattern, excluded):
-            if not professional_raters or row["labeler_username"] in professional_raters:
+            if not allowed_raters or row["labeler_username"] in allowed_raters:
                 valid_rows.append(row)
     return valid_rows
 
 
 def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], per_trial: bool = False) -> List[Dict[str, Any]]:
-    """Aggregate trial metrics by user, project, and SNR, or return per-trial if per_trial=True."""
+    """Compute per-group or per-trial annotation and ASR metrics.
+
+    When ``per_trial`` is ``False`` (the default), rows are grouped by
+    ``(user, project, snr)`` and the metrics are averaged within each group.
+    When ``per_trial`` is ``True``, each row produces one output record
+    without averaging.
+
+    Args:
+        rows: Iterable of database rows as returned by :func:`fetch_trials`.
+        homonyms: Bidirectional homonym map as returned by :func:`read_homonyms`.
+        per_trial: If ``True``, return one record per row instead of aggregating
+            by subject/project/SNR group.
+
+    Returns:
+        List of dicts with keys: ``user``, ``project``, ``snr``, ``records``,
+        ``mean_fraction_audio_annotation_true``,
+        ``mean_fraction_review_annotation_true``,
+        ``average_matched_word_count``, ``normalized_matched_word_count``.
+    """
     if per_trial:
         # Return one entry per trial without aggregation
         summary = []
@@ -274,7 +399,16 @@ def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], per_tr
 
 
 def pearson(x: List[float], y: List[float]) -> float:
-    """Calculate Pearson's correlation without requiring SciPy."""
+    """Compute Pearson's correlation coefficient without requiring SciPy.
+
+    Args:
+        x: First sequence of numeric values.
+        y: Second sequence of numeric values, same length as ``x``.
+
+    Returns:
+        Pearson correlation in the range ``[-1, 1]``, or ``nan`` if fewer than
+        two data points are provided or if either variable has zero variance.
+    """
     if len(x) < 2:
         return float("nan")
     x_mean = sum(x) / len(x)
@@ -287,7 +421,13 @@ def pearson(x: List[float], y: List[float]) -> float:
 
 
 def write_csv(summary: List[Dict[str, Any]]) -> None:
-    """Write summary rows to the configured CSV file."""
+    """Write summary rows to the CSV file specified by ``--output``.
+
+    Args:
+        summary: List of summary dicts as returned by :func:`summarize`. The
+            field names are taken from the first dict's keys. Does nothing if
+            ``summary`` is empty.
+    """
     fields = list(summary[0]) if summary else [
         "user", "project", "snr", "records",
         "mean_fraction_audio_annotation_true",
@@ -301,7 +441,14 @@ def write_csv(summary: List[Dict[str, Any]]) -> None:
 
 
 def print_statistics(summary: List[Dict[str, Any]]) -> None:
-    """Print the three notebook comparisons and their correlations."""
+    """Print Pearson correlation and mean bias for the three rater comparisons.
+
+    Prints one line per comparison showing the Pearson r and the mean signed
+    difference (Y - X).
+
+    Args:
+        summary: List of summary dicts as returned by :func:`summarize`.
+    """
     comparisons = [
         ("Audio vs. Review Annotation", "mean_fraction_audio_annotation_true", "mean_fraction_review_annotation_true"),
         ("Matched Words vs. Audio Annotation", "normalized_matched_word_count", "mean_fraction_audio_annotation_true"),
@@ -317,18 +464,24 @@ def print_statistics(summary: List[Dict[str, Any]]) -> None:
 
 
 def fit_regression(x: List[float], y: List[float], fixed_slope: Optional[float] = None) -> Tuple[float, float]:
-    """Return slope and intercept for a full or fixed-slope linear fit.
-    
+    """Fit a linear model to ``(x, y)`` data, optionally with a fixed slope.
+
     Uses two algorithms depending on whether a fixed slope is provided:
-    
-    1. Fixed-slope fit (when fixed_slope is provided):
-       Calculates intercept as the average of residuals:
-       intercept = mean(y - fixed_slope * x)
-       Used for perfect agreement line (slope=1).
-    
-    2. Ordinary Least Squares (OLS) fit (when fixed_slope is None):
-       Computes slope = cov(x,y) / var(x) and intercept = mean(y) - slope * mean(x).
-       Standard linear regression without external dependencies.
+
+    1. **Fixed-slope fit** (``fixed_slope`` is not ``None``): intercept is the
+       mean residual ``mean(y - fixed_slope * x)``. Used for the slope=1
+       perfect-agreement line.
+    2. **OLS fit** (``fixed_slope`` is ``None``): slope is
+       ``cov(x, y) / var(x)`` and intercept is ``mean(y) - slope * mean(x)``.
+
+    Args:
+        x: Predictor values.
+        y: Response values, same length as ``x``.
+        fixed_slope: If provided, hold the slope at this value and solve only
+            for the intercept.
+
+    Returns:
+        Tuple of ``(slope, intercept)``.
     """
     if fixed_slope is not None:
         return fixed_slope, sum(y_i - fixed_slope * x_i for x_i, y_i in zip(x, y)) / len(y)
@@ -343,7 +496,21 @@ def fit_regression(x: List[float], y: List[float], fixed_slope: Optional[float] 
 
 
 def add_fit_line(axis, x: List[float], y: List[float], slope: float, bias: float, linestyle: str, label_y_offset: float) -> None:
-    """Draw a regression line and a rotated label aligned to that line."""
+    """Draw a regression line with a rotated slope/intercept label on a matplotlib axis.
+
+    The label is rendered at the midpoint of the line and rotated to match the
+    line's angle in display coordinates.
+
+    Args:
+        axis: Matplotlib ``Axes`` object to draw on.
+        x: X data values used to determine the line's horizontal extent.
+        y: Y data values (unused for drawing; kept for API symmetry).
+        slope: Slope of the line.
+        bias: Y-intercept of the line.
+        linestyle: Matplotlib linestyle string (e.g. ``'--'`` or ``':'``).
+        label_y_offset: Vertical offset in data units applied to the label
+            position to avoid overlap with the line.
+    """
     x_start, x_end = min(x), max(x)
     if x_start == x_end:
         x_start -= 0.05
@@ -373,7 +540,25 @@ def add_fit_line(axis, x: List[float], y: List[float], slope: float, bias: float
 def scatter_plot(axis, summary: List[Dict[str, Any]], x_key: str, y_key: str,
                  x_label: str, y_label: str, marker_size: float = 50,
                  alpha: float = 0.7, title_suffix: str = "") -> None:
-    """Plot one comparison with full and slope-one regression fits."""
+    """Render a single scatter panel with OLS and slope-1 regression overlays.
+
+    Each dot represents one row of ``summary`` (a subject/project/SNR group or
+    an individual trial, depending on ``--per_trial``). Two regression lines
+    are drawn: a dashed OLS fit and a dotted slope-1 (perfect agreement) line.
+    The Pearson correlation is shown in the panel title.
+
+    Args:
+        axis: Matplotlib ``Axes`` object to draw on.
+        summary: List of summary dicts as returned by :func:`summarize`.
+        x_key: Dict key for the X-axis values.
+        y_key: Dict key for the Y-axis values.
+        x_label: Axis label for the X axis.
+        y_label: Axis label for the Y axis.
+        marker_size: Scatter dot size in points squared.
+        alpha: Dot opacity in the range ``[0, 1]``.
+        title_suffix: Optional string appended to the panel title in
+            parentheses alongside the Pearson r value.
+    """
     x = [row[x_key] for row in summary]
     y = [row[y_key] for row in summary]
     axis.scatter(x, y, s=marker_size, alpha=alpha)
@@ -399,7 +584,18 @@ def scatter_plot(axis, summary: List[Dict[str, Any]], x_key: str, y_key: str,
 
 
 def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
-    """Create the notebook's three-panel scatter plot."""
+    """Create and save the three-panel scatter plot.
+
+    The three panels compare: (1) audiologist vs. rerater fractions,
+    (2) normalized ASR score vs. audiologist fraction, and (3) normalized ASR
+    score vs. rerater fraction. The plot is saved to the path given by
+    ``--plot``.
+
+    Args:
+        summary: List of summary dicts as returned by :func:`summarize`.
+        per_trial: If ``True``, the aggregation label in each panel title reads
+            "Per Trial"; otherwise "Subject/Project/SNR Aggregates".
+    """
     import matplotlib.pyplot as plt
 
     figure, axes = plt.subplots(1, 3, figsize=(12, 4))
@@ -432,6 +628,11 @@ def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
 
 
 def main(argv: List[str]) -> None:
+    """Entry point: load data, compute summaries, write CSV and optional plot.
+
+    Args:
+        argv: Unused command-line arguments (consumed by ABSL).
+    """
     del argv
     logging.info(
         f"Starting summarize_raters: dbfile={FLAGS.dbfile}, language={FLAGS.language}, "
@@ -439,14 +640,24 @@ def main(argv: List[str]) -> None:
     )
     homonyms = read_homonyms(FLAGS.homonyms)
     professional_raters = read_professional_raters(FLAGS.professional_raters)
-    logging.info(f"Loaded professional raters: {len(professional_raters)}")
+    student_raters = read_professional_raters(FLAGS.student_raters)
+    logging.info(
+        f"Loaded {len(professional_raters)} professional raters, {len(student_raters)} student raters, "
+        f"rater_type={FLAGS.rater_type}"
+    )
+    if FLAGS.rater_type == "professional":
+        allowed_raters = professional_raters
+    elif FLAGS.rater_type == "student":
+        allowed_raters = student_raters
+    else:
+        allowed_raters = set()  # empty means allow all
     rows = fetch_trials(
         FLAGS.dbfile,
         FLAGS.language,
         FLAGS.project,
         FLAGS.subject_pattern,
         FLAGS.excluded_subjects,
-        professional_raters,
+        allowed_raters,
     )
     summary = summarize(rows, homonyms, per_trial=FLAGS.per_trial)
     write_csv(summary)

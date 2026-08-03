@@ -1,0 +1,19 @@
+# List of valid student rater usernames (one per line)
+# Lines starting with # are ignored
+caitlin_kinsella@rush.edu
+nisha_dhanik@rush.edu
+agaupperlee21@gmail.com
+k_saalfeld@u.pacific.edu
+haley_johnson@rush.edu
+emarksxb@gmail.com
+nasoffdw@gmail.com
+mariam_abdallah@rush.edu
+landynnsadler@gmail.com
+alberta_tran@rush.edu
+c_porter5@u.pacific.edu
+olivia_a_lepien@rush.edu
+ellen.stuckwisch@icloud.com
+sara_i_perez@rush.edu
+catherineterk@gmail.com
+sarah_r_fondel@rush.edu
+g_park16@u.pacific.edu
