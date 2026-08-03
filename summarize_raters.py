@@ -47,7 +47,7 @@ from absl import flags
 
 FLAGS = flags.FLAGS
 try:
-    flags.DEFINE_string("dbfile", "experiments_malcolm.db", "Path to the SQLite database.")
+    flags.DEFINE_string("dbfile", "experiments.db", "Path to the SQLite database.")
 except flags.DuplicateFlagError:
     pass
 flags.DEFINE_string("homonyms", "homonym_list.csv", "Path to the homonym CSV file.")
@@ -201,7 +201,7 @@ def fetch_trials(
             LEFT JOIN audio_annotations aa ON ar.id = aa.ref
             JOIN review_annotations ra ON ar.id = ra.ref
             JOIN users labeler_user ON ra.labeler = labeler_user.id
-            JOIN audio_asr asr ON ar.id = asr.ref
+            LEFT JOIN audio_asr asr ON ar.id = asr.ref
             WHERE at.lang = ?
               AND at.project = ?
               AND asr.data IS NOT NULL AND asr.data != ''
@@ -210,11 +210,9 @@ def fetch_trials(
             (language, project),
         ).fetchall()
     
-    # Filter by valid subject and professional rater
     valid_rows = []
     for row in rows:
         if is_valid_subject(row["username"], subject_regex.pattern, excluded):
-            # If no professional raters list provided, allow all; otherwise check list
             if not professional_raters or row["labeler_username"] in professional_raters:
                 valid_rows.append(row)
     return valid_rows
@@ -435,6 +433,10 @@ def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
 
 def main(argv: List[str]) -> None:
     del argv
+    logging.info(
+        f"Starting summarize_raters: dbfile={FLAGS.dbfile}, language={FLAGS.language}, "
+        f"project={FLAGS.project}, per_trial={FLAGS.per_trial}"
+    )
     homonyms = read_homonyms(FLAGS.homonyms)
     professional_raters = read_professional_raters(FLAGS.professional_raters)
     logging.info(f"Loaded professional raters: {len(professional_raters)}")
