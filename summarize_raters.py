@@ -359,8 +359,16 @@ def scatter_plot(axis, summary: List[Dict[str, Any]], x_key: str, y_key: str,
     add_fit_line(axis, x, y, fixed_slope, fixed_bias, ":", -label_offset)
     axis.set_xlabel(x_label)
     axis.set_ylabel(y_label)
+    
+    # Calculate and display Pearson correlation
+    r = pearson(x, y)
+    r_text = f"r={r:.3f}" if not math.isnan(r) else "r=N/A"
+    
     if title_suffix:
-        axis.set_title(f"{x_label} vs {y_label}\n({title_suffix})")
+        axis.set_title(f"{x_label} vs {y_label}\n({title_suffix}, {r_text})")
+    else:
+        axis.set_title(f"{x_label} vs {y_label}\n({r_text})")
+    
     axis.grid(True, linestyle="--", alpha=0.6)
 
 
