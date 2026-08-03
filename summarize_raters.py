@@ -436,6 +436,7 @@ def main(argv: List[str]) -> None:
     del argv
     homonyms = read_homonyms(FLAGS.homonyms)
     professional_raters = read_professional_raters(FLAGS.professional_raters)
+    logging.info(f"Loaded professional raters: {len(professional_raters)}")
     rows = fetch_trials(
         FLAGS.dbfile,
         FLAGS.language,
