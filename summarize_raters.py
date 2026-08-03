@@ -97,6 +97,13 @@ flags.DEFINE_enum(
     ["all", "professional", "student"],
     "Which raters to include: all, professional (from --professional_raters), or student (from --student_raters).",
 )
+flags.DEFINE_bool(
+    "show_outliers",
+    False,
+    "Print trial details for rows where ASR score <= --outlier_asr_max and audiologist score >= --outlier_audio_min.",
+)
+flags.DEFINE_float("outlier_asr_max", 0.1, "ASR threshold for outlier detection (normalized, 0-1).")
+flags.DEFINE_float("outlier_audio_min", 0.6, "Audiologist threshold for outlier detection (fraction true, 0-1).")
 
 
 def read_professional_raters(filename: str) -> Set[str]:
@@ -440,6 +447,50 @@ def write_csv(summary: List[Dict[str, Any]]) -> None:
         writer.writerows(summary)
 
 
+def print_outlier_details(
+    rows: List[sqlite3.Row],
+    homonyms: Dict[str, Set[str]],
+    asr_max: float,
+    audio_min: float,
+) -> None:
+    """Print ground truth, ASR transcript, and audiologist annotations for outlier trials.
+
+    An outlier is a trial where the normalized ASR score is at or below
+    ``asr_max`` and the audiologist true fraction is at or above ``audio_min``.
+
+    Args:
+        rows: Raw trial rows as returned by :func:`fetch_trials`.
+        homonyms: Bidirectional homonym map as returned by :func:`read_homonyms`.
+        asr_max: Maximum normalized ASR score to qualify as an outlier.
+        audio_min: Minimum audiologist true fraction to qualify as an outlier.
+    """
+    found = 0
+    for row in rows:
+        asr_words = extract_asr_words(row["audio_asr_data"])
+        matched = score_trial(row["answer"], asr_words, homonyms)
+        normalized_asr = matched / FLAGS.max_words
+        audio_fraction = fraction_true(row["audio_annotation_data"])
+        if normalized_asr <= asr_max and audio_fraction >= audio_min:
+            found += 1
+            asr_text = ""
+            try:
+                asr_text = json.loads(row["audio_asr_data"]).get("text", "").strip()
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                pass
+            print(
+                f"--- Outlier {found} ---\n"
+                f"  Subject:      {row['username']} (id={row['user']})\n"
+                f"  Project/SNR:  {row['project']} / {row['snr']}\n"
+                f"  Ground truth: {row['answer']}\n"
+                f"  ASR output:   {asr_text}\n"
+                f"  ASR matched:  {matched}/{FLAGS.max_words} (normalized={normalized_asr:.2f})\n"
+                f"  Audiologist:  {row['audio_annotation_data']} (fraction={audio_fraction:.2f})\n"
+                f"  Rerater:      {row['review_annotation_data']}\n"
+            )
+    if not found:
+        print(f"No outliers found with ASR <= {asr_max} and audiologist >= {audio_min}.")
+
+
 def print_statistics(summary: List[Dict[str, Any]]) -> None:
     """Print Pearson correlation and mean bias for the three rater comparisons.
 
@@ -660,6 +711,8 @@ def main(argv: List[str]) -> None:
         allowed_raters,
     )
     summary = summarize(rows, homonyms, per_trial=FLAGS.per_trial)
+    if FLAGS.show_outliers:
+        print_outlier_details(rows, homonyms, FLAGS.outlier_asr_max, FLAGS.outlier_audio_min)
     write_csv(summary)
     print_statistics(summary)
     print(f"Wrote summary to {FLAGS.output}")
