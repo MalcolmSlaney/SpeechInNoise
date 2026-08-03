@@ -80,6 +80,25 @@ flags.DEFINE_float(
     0.7,
     "Opaqueness (alpha) of scatter plot dots. Range: 0.0 (transparent) to 1.0 (opaque).",
 )
+flags.DEFINE_string(
+    "professional_raters",
+    "metadata/professional_raters.txt",
+    "Path to file with valid professional rater usernames (one per line).",
+)
+
+
+def read_professional_raters(filename: str) -> Set[str]:
+    """Read professional rater usernames from a file (one per line, comments ignored)."""
+    raters: Set[str] = set()
+    try:
+        with open(filename, "r", encoding="utf-8") as file:
+            for line in file:
+                line = line.split("#", 1)[0].strip()
+                if line:
+                    raters.add(line)
+    except FileNotFoundError:
+        pass  # If file doesn't exist, allow all raters
+    return raters
 
 
 def read_homonyms(filename: str) -> Dict[str, Set[str]]:
@@ -156,8 +175,9 @@ def fetch_trials(
     project: str,
     subject_pattern: str,
     excluded_subjects: Iterable[str],
+    professional_raters: Set[str],
 ) -> List[sqlite3.Row]:
-    """Fetch valid-subject trials with computed ASR and reviewer annotations."""
+    """Fetch valid-subject trials with computed ASR and reviewer annotations from valid raters."""
     subject_regex = re.compile(subject_pattern)
     excluded = set(excluded_subjects)
     with sqlite3.connect(dbfile) as connection:
@@ -172,12 +192,14 @@ def fetch_trials(
                 at.answer,
                 aa.data AS audio_annotation_data,
                 ra.data AS review_annotation_data,
-                asr.data AS audio_asr_data
+                asr.data AS audio_asr_data,
+                labeler_user.username AS labeler_username
             FROM audio_results ar
             JOIN audio_trials at ON ar.trial = at.id
             JOIN users u ON ar.subject = u.id
             LEFT JOIN audio_annotations aa ON ar.id = aa.ref
             JOIN review_annotations ra ON ar.id = ra.ref
+            JOIN users labeler_user ON ra.labeler = labeler_user.id
             JOIN audio_asr asr ON ar.id = asr.ref
             WHERE at.lang = ?
               AND at.project = ?
@@ -186,10 +208,15 @@ def fetch_trials(
             """,
             (language, project),
         ).fetchall()
-    return [
-        row for row in rows
-        if is_valid_subject(row["username"], subject_regex.pattern, excluded)
-    ]
+    
+    # Filter by valid subject and professional rater
+    valid_rows = []
+    for row in rows:
+        if is_valid_subject(row["username"], subject_regex.pattern, excluded):
+            # If no professional raters list provided, allow all; otherwise check list
+            if not professional_raters or row["labeler_username"] in professional_raters:
+                valid_rows.append(row)
+    return valid_rows
 
 
 def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], per_trial: bool = False) -> List[Dict[str, Any]]:
@@ -408,12 +435,14 @@ def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
 def main(argv: List[str]) -> None:
     del argv
     homonyms = read_homonyms(FLAGS.homonyms)
+    professional_raters = read_professional_raters(FLAGS.professional_raters)
     rows = fetch_trials(
         FLAGS.dbfile,
         FLAGS.language,
         FLAGS.project,
         FLAGS.subject_pattern,
         FLAGS.excluded_subjects,
+        professional_raters,
     )
     summary = summarize(rows, homonyms, per_trial=FLAGS.per_trial)
     write_csv(summary)
