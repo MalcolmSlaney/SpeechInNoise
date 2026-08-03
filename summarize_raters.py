@@ -34,6 +34,7 @@ The CSV also includes the group's subject, project, SNR, and trial count.
 
 import csv
 import json
+import logging
 import math
 import re
 import sqlite3
