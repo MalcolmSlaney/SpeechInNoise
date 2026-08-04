@@ -104,6 +104,8 @@ flags.DEFINE_bool(
 )
 flags.DEFINE_float("outlier_asr_max", 0.1, "ASR threshold for outlier detection (normalized, 0-1).")
 flags.DEFINE_float("outlier_audio_min", 0.6, "Audiologist threshold for outlier detection (fraction true, 0-1).")
+flags.DEFINE_string("subject_plot", "subject_rater_summary.png", "PNG file for the per-subject rater comparison plot.")
+flags.DEFINE_bool("no_subject_plot", False, "Do not create the per-subject rater comparison plot.")
 
 
 def read_professional_raters(filename: str) -> Set[str]:
@@ -634,6 +636,85 @@ def scatter_plot(axis, summary: List[Dict[str, Any]], x_key: str, y_key: str,
     axis.grid(True, linestyle="--", alpha=0.6)
 
 
+def create_subject_rater_plot(
+    rows: List[sqlite3.Row],
+    homonyms: Dict[str, Set[str]],
+    professional_raters: Set[str],
+    student_raters: Set[str],
+) -> None:
+    """Create and save a per-subject plot comparing ASR and rater scores.
+
+    Each subject occupies one x-position. A single dot shows the subject's
+    mean normalized ASR score. Additional dots show each rater's mean fraction
+    of words marked correct, color-coded by rater type.
+
+    Args:
+        rows: Raw trial rows as returned by :func:`fetch_trials`.
+        homonyms: Bidirectional homonym map as returned by :func:`read_homonyms`.
+        professional_raters: Set of professional rater usernames.
+        student_raters: Set of student rater usernames.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+
+    # Accumulate per-subject ASR scores and per-(subject, rater) review fractions
+    asr_scores: Dict[Any, List[float]] = defaultdict(list)
+    rater_scores: Dict[Tuple[Any, str], List[float]] = defaultdict(list)
+
+    for row in rows:
+        subject = row["user"]
+        matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
+        asr_scores[subject].append(matched / FLAGS.max_words)
+        rater_scores[(subject, row["labeler_username"])].append(
+            fraction_true(row["review_annotation_data"])
+        )
+
+    subjects = sorted(asr_scores.keys())
+    x_positions = {subject: i for i, subject in enumerate(subjects)}
+
+    figure, axis = plt.subplots(figsize=(max(8, len(subjects) * 0.6), 5))
+
+    # Plot ASR result per subject as an 'x'
+    for subject, scores in asr_scores.items():
+        axis.scatter(
+            x_positions[subject], sum(scores) / len(scores),
+            color="steelblue", s=60, zorder=3, alpha=FLAGS.alpha, marker="x",
+        )
+
+    # Plot one dot per (subject, rater) for professional and student raters only
+    for (subject, rater), scores in rater_scores.items():
+        if rater in professional_raters:
+            color = "crimson"
+        elif rater in student_raters:
+            color = "darkorange"
+        else:
+            continue
+        axis.scatter(
+            x_positions[subject], sum(scores) / len(scores),
+            color=color, s=30, zorder=2, alpha=FLAGS.alpha,
+        )
+
+    axis.set_xticks(range(len(subjects)))
+    axis.set_xticklabels(
+        [str(s) for s in subjects], rotation=45, ha="right", fontsize=7
+    )
+    axis.set_xlabel("Subject #")
+    axis.set_ylabel("Fraction correct")
+    axis.set_title("Per-subject ASR and rater scores")
+    axis.grid(True, axis="y", linestyle="--", alpha=0.5)
+
+    legend_handles = [
+        mpatches.Patch(color="steelblue", label="ASR"),
+        mpatches.Patch(color="crimson", label="Professional rater"),
+        mpatches.Patch(color="darkorange", label="Student rater"),
+    ]
+    axis.legend(handles=legend_handles, loc="upper right", fontsize=8)
+
+    figure.tight_layout()
+    figure.savefig(FLAGS.subject_plot, dpi=150)
+    print(f"Wrote subject plot to {FLAGS.subject_plot}")
+
+
 def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
     """Create and save the three-panel scatter plot.
 
@@ -718,6 +799,8 @@ def main(argv: List[str]) -> None:
     print(f"Wrote summary to {FLAGS.output}")
     if summary and not FLAGS.no_plot:
         create_plot(summary, per_trial=FLAGS.per_trial)
+    if rows and not FLAGS.no_subject_plot:
+        create_subject_rater_plot(rows, homonyms, professional_raters, student_raters)
 
 
 if __name__ == "__main__":
