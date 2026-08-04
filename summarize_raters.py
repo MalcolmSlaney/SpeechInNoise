@@ -7,7 +7,7 @@ The program reads SQLite tables ``audio_results``, ``audio_trials``,
 audio result when its trial matches ``--language`` and ``--project``, its ASR
 data is non-empty, and it has non-empty ``review_annotations.data``. There is
 also a subject validity filter: the username must fully match
-``--subject_pattern`` (by default ``A\d+[SP]\d+``) and must not be in
+``--subject_pattern`` (by default ``A\\d+[SP]\\d+``) and must not be in
 ``--excluded_subjects`` (by default ``A2P2``). ``audio_annotations`` is a left
 join, so a missing audiologist annotation contributes a zero fraction rather
 than excluding the result.
@@ -106,6 +106,9 @@ flags.DEFINE_float("outlier_asr_max", 0.1, "ASR threshold for outlier detection 
 flags.DEFINE_float("outlier_audio_min", 0.6, "Audiologist threshold for outlier detection (fraction true, 0-1).")
 flags.DEFINE_string("subject_plot", "subject_rater_summary.png", "PNG file for the per-subject rater comparison plot.")
 flags.DEFINE_bool("no_subject_plot", False, "Do not create the per-subject rater comparison plot.")
+flags.DEFINE_string("residual_plot", "residual_summary.png", "PNG file for the per-subject residual histogram plot.")
+flags.DEFINE_bool("no_residual_plot", False, "Do not create the per-subject residual histogram plot.")
+flags.DEFINE_bool("show_regression", False, "Show OLS and slope-1 regression lines on the summary scatter plots.")
 
 
 def read_professional_raters(filename: str) -> Set[str]:
@@ -615,12 +618,13 @@ def scatter_plot(axis, summary: List[Dict[str, Any]], x_key: str, y_key: str,
     x = [row[x_key] for row in summary]
     y = [row[y_key] for row in summary]
     axis.scatter(x, y, s=marker_size, alpha=alpha)
-    full_slope, full_bias = fit_regression(x, y)
-    fixed_slope, fixed_bias = fit_regression(x, y, fixed_slope=1.0)
-    x_span = max(y) - min(y) if y else 0.0
-    label_offset = max(0.01, x_span * 0.04)
-    add_fit_line(axis, x, y, full_slope, full_bias, "--", label_offset)
-    add_fit_line(axis, x, y, fixed_slope, fixed_bias, ":", -label_offset)
+    if FLAGS.show_regression:
+        full_slope, full_bias = fit_regression(x, y)
+        fixed_slope, fixed_bias = fit_regression(x, y, fixed_slope=1.0)
+        x_span = max(y) - min(y) if y else 0.0
+        label_offset = max(0.01, x_span * 0.04)
+        add_fit_line(axis, x, y, full_slope, full_bias, "--", label_offset)
+        add_fit_line(axis, x, y, fixed_slope, fixed_bias, ":", -label_offset)
     axis.set_xlabel(x_label)
     axis.set_ylabel(y_label)
     
@@ -634,6 +638,83 @@ def scatter_plot(axis, summary: List[Dict[str, Any]], x_key: str, y_key: str,
         axis.set_title(f"{x_label} vs {y_label}\n({r_text})")
     
     axis.grid(True, linestyle="--", alpha=0.6)
+
+
+def create_residual_plot(
+    rows: List[sqlite3.Row],
+    homonyms: Dict[str, Set[str]],
+    professional_raters: Set[str],
+    student_raters: Set[str],
+) -> None:
+    """Create and save a histogram of per-subject-mean-subtracted ASR and rater scores.
+
+    For each subject, the mean rater score (professional + student only) is
+    computed and subtracted from both the subject's ASR score and each
+    individual rater's score. The resulting residuals are collected across all
+    subjects and plotted as overlapping histograms.
+
+    Args:
+        rows: Raw trial rows as returned by :func:`fetch_trials`.
+        homonyms: Bidirectional homonym map as returned by :func:`read_homonyms`.
+        professional_raters: Set of professional rater usernames.
+        student_raters: Set of student rater usernames.
+    """
+    import matplotlib.pyplot as plt
+
+    valid_raters = professional_raters | student_raters
+
+    # Accumulate per-subject ASR and per-(subject,rater) review scores
+    asr_scores: Dict[Any, List[float]] = defaultdict(list)
+    rater_scores: Dict[Tuple[Any, str], List[float]] = defaultdict(list)
+
+    for row in rows:
+        subject = row["user"]
+        matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
+        asr_scores[subject].append(matched / FLAGS.max_words)
+        if row["labeler_username"] in valid_raters:
+            rater_scores[(subject, row["labeler_username"])].append(
+                fraction_true(row["review_annotation_data"])
+            )
+
+    # Compute per-subject mean rater score (professional + student only)
+    subject_rater_mean: Dict[Any, float] = {}
+    for subject in asr_scores:
+        subject_rater_vals = [
+            sum(scores) / len(scores)
+            for (subj, _rater), scores in rater_scores.items()
+            if subj == subject
+        ]
+        if subject_rater_vals:
+            subject_rater_mean[subject] = sum(subject_rater_vals) / len(subject_rater_vals)
+
+    # Subtract per-subject mean from ASR and rater scores
+    asr_residuals = [
+        sum(scores) / len(scores) - subject_rater_mean[subject]
+        for subject, scores in asr_scores.items()
+        if subject in subject_rater_mean
+    ]
+    rater_residuals = [
+        sum(scores) / len(scores) - subject_rater_mean[subject]
+        for (subject, _rater), scores in rater_scores.items()
+        if subject in subject_rater_mean
+    ]
+
+    figure, axis = plt.subplots()
+    all_residuals = asr_residuals + rater_residuals
+    lo, hi = min(all_residuals), max(all_residuals)
+    step = (hi - lo) / 40
+    bins = [lo + i * step for i in range(41)]
+    axis.hist(asr_residuals, bins=bins, alpha=0.6, color="steelblue", label="ASR residuals")
+    axis.hist(rater_residuals, bins=bins, alpha=0.6, color="crimson", label="Rater residuals")
+    axis.axvline(0, color="black", linewidth=0.8, linestyle="--")
+    axis.set_xlabel("Score − per-subject mean rater score")
+    axis.set_ylabel("Count")
+    axis.set_title("Distribution of residuals after removing per-subject rater baseline")
+    axis.legend(fontsize=9)
+    axis.grid(True, axis="y", linestyle="--", alpha=0.5)
+    figure.tight_layout()
+    figure.savefig(FLAGS.residual_plot, dpi=150)
+    print(f"Wrote residual plot to {FLAGS.residual_plot}")
 
 
 def create_subject_rater_plot(
@@ -672,7 +753,7 @@ def create_subject_rater_plot(
     subjects = sorted(asr_scores.keys())
     x_positions = {subject: i for i, subject in enumerate(subjects)}
 
-    figure, axis = plt.subplots(figsize=(max(8, len(subjects) * 0.6), 5))
+    figure, axis = plt.subplots(figsize=(max(6, len(subjects) * 0.25), 5))
 
     # Plot ASR result per subject as an 'x'
     for subject, scores in asr_scores.items():
@@ -732,12 +813,13 @@ def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
 
     figure, axes = plt.subplots(1, 3, figsize=(12, 4))
     aggregation_label = "Per Trial" if per_trial else "Subject/Project/SNR Aggregates"
-    
+    rater_label = FLAGS.rater_type.capitalize() + " Reraters"
+
     scatter_plot(
         axes[0], summary,
         "mean_fraction_audio_annotation_true",
         "mean_fraction_review_annotation_true",
-        "Audiologist", "Reraters", marker_size=50, alpha=FLAGS.alpha,
+        "Audiologist", rater_label, marker_size=50, alpha=FLAGS.alpha,
         title_suffix=aggregation_label,
     )
     scatter_plot(
@@ -751,7 +833,7 @@ def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
         axes[2], summary,
         "normalized_matched_word_count",
         "mean_fraction_review_annotation_true",
-        "ASR", "Reraters", marker_size=50, alpha=FLAGS.alpha,
+        "ASR", rater_label, marker_size=50, alpha=FLAGS.alpha,
         title_suffix=aggregation_label,
     )
     figure.tight_layout()
@@ -801,6 +883,8 @@ def main(argv: List[str]) -> None:
         create_plot(summary, per_trial=FLAGS.per_trial)
     if rows and not FLAGS.no_subject_plot:
         create_subject_rater_plot(rows, homonyms, professional_raters, student_raters)
+    if rows and not FLAGS.no_residual_plot:
+        create_residual_plot(rows, homonyms, professional_raters, student_raters)
 
 
 if __name__ == "__main__":
