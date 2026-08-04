@@ -1346,9 +1346,15 @@
         if (snr && r.trials_snr !== snr) return false;
 
         if (mismatchedOnly) {
-          const correctCount = parseInt(r.asr_correct_word_count || "0", 10);
-          const gtCount = parseInt(r.asr_gt_word_count || "0", 10);
-          if (correctCount === gtCount) return false;
+          const matchVal = (r.audiology_asr_matches || r.annotation_matches || r.asr_matches || "").toLowerCase();
+          if (matchVal) {
+            // Include row ONLY if Audiology ASR Matches is NOT all true (i.e. contains 'false')
+            if (!matchVal.includes("false")) return false;
+          } else {
+            const correctCount = parseInt(r.asr_correct_word_count || "0", 10);
+            const gtCount = parseInt(r.asr_gt_word_count || "0", 10);
+            if (correctCount === gtCount) return false;
+          }
         }
 
         if (sText) {
@@ -1443,6 +1449,40 @@
       feather.replace();
     }
 
+    // Download audio file helper
+    function downloadAudio(filename) {
+      if (!filename) {
+        showToast("No audio file available for download");
+        return;
+      }
+      const audioUrl = `https://quicksin.manus.space/api/audio/${filename}`;
+      showToast(`Downloading ${filename}...`);
+
+      fetch(audioUrl)
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.blob();
+        })
+        .then(blob => {
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = blobUrl;
+          const downloadName = (filename.toLowerCase().endsWith(".wav") || filename.toLowerCase().endsWith(".mp3"))
+            ? filename 
+            : `${filename}.wav`;
+          a.download = downloadName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(blobUrl);
+          showToast(`Downloaded ${downloadName}`);
+        })
+        .catch(err => {
+          console.warn("[Download] Direct blob download failed, opening URL directly...", err);
+          window.open(audioUrl, "_blank");
+        });
+    }
+
     // Render Table Body
     function renderTableBody() {
       const tbody = document.getElementById("tableBody");
@@ -1474,7 +1514,7 @@
             
             return `
               <td>
-                <button class="speaker-btn" data-filename="${audioFile}" data-phrase="${targetPhrase.replace(/"/g, '&quot;')}">
+                <button class="speaker-btn" data-filename="${audioFile}" data-phrase="${targetPhrase.replace(/"/g, '&quot;')}" title="Click to Play • Ctrl+Click / Cmd+Click / Alt+Click to Download">
                   <i data-feather="volume-2" style="width: 16px; height: 16px;"></i>
                   <span>Play</span>
                 </button>
@@ -1502,7 +1542,12 @@
           e.stopPropagation();
           const filename = btn.getAttribute("data-filename");
           const phrase = btn.getAttribute("data-phrase");
-          audioController.play(filename, btn, phrase);
+          
+          if (e.ctrlKey || e.metaKey || e.altKey) {
+            downloadAudio(filename);
+          } else {
+            audioController.play(filename, btn, phrase);
+          }
         });
       });
 
