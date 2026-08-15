@@ -506,9 +506,9 @@ def print_statistics(summary: List[Dict[str, Any]]) -> None:
         summary: List of summary dicts as returned by :func:`summarize`.
     """
     comparisons = [
-        ("Audio vs. Review Annotation", "mean_fraction_audio_annotation_true", "mean_fraction_review_annotation_true"),
-        ("Matched Words vs. Audio Annotation", "normalized_matched_word_count", "mean_fraction_audio_annotation_true"),
-        ("Matched Words vs. Review Annotation", "normalized_matched_word_count", "mean_fraction_review_annotation_true"),
+        ("Audiologists vs. Raters", "mean_fraction_audio_annotation_true", "mean_fraction_review_annotation_true"),
+        ("ASR vs. Audiologists", "normalized_matched_word_count", "mean_fraction_audio_annotation_true"),
+        ("ASR vs. Raters", "normalized_matched_word_count", "mean_fraction_review_annotation_true"),
     ]
     print(f"Fetched {len(summary)} subject/project/SNR summaries.")
     for name, x_key, y_key in comparisons:
@@ -698,6 +698,22 @@ def create_residual_plot(
         for (subject, _rater), scores in rater_scores.items()
         if subject in subject_rater_mean
     ]
+
+    def population_std(values: List[float]) -> float:
+        if not values:
+            return float("nan")
+        mean_value = sum(values) / len(values)
+        return math.sqrt(sum((value - mean_value) ** 2 for value in values) / len(values))
+
+    asr_std = population_std(asr_residuals)
+    rater_std = population_std(rater_residuals)
+    std_ratio = asr_std / rater_std if (not math.isnan(asr_std) and not math.isnan(rater_std) and rater_std != 0) else float("nan")
+    print(
+        "Residual standard deviation summary: "
+        f"ASR={asr_std:.4f} (n={len(asr_residuals)}), "
+        f"Rater={rater_std:.4f} (n={len(rater_residuals)}), "
+        f"ASR/Rater={std_ratio:.4f}"
+    )
 
     figure, axis = plt.subplots()
     all_residuals = asr_residuals + rater_residuals

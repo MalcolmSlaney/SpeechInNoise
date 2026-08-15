@@ -29,7 +29,7 @@ import asr
 default_sample_rate = 22050
 
 FLAGS = flags.FLAGS
-models = [
+asr_model_names = [
     "tiny.en", "tiny",
     "base.en", "base",
     "small.en", "small",
@@ -52,7 +52,7 @@ try:
     flags.DEFINE_enum(
         'model',
         'medium.en',
-        models,
+        asr_model_names,
         'Which Whisper model size to use; see: https://github.com/openai/whisper#available-models-and-languages'
     )
 except DuplicateFlagError:
