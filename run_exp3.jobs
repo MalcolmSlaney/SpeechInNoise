@@ -1,0 +1,12 @@
+# A list of jobs for exp3 shell, each line consists of an experiment name (tag)
+# and then a list of offline_line_asr parameters
+
+tiny.en	--model_name=tiny.en
+tiny	--model_name=tiny
+base.en	--model_name=base.en
+base	--model_name=base
+small.en	--model_name=small.en
+small	--model_name=small
+medium.en	--model_name=medium.en
+medium	--model_name=medium
+large	--model_name=large

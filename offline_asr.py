@@ -100,7 +100,7 @@ flags.DEFINE_integer(
 flags.DEFINE_list(
   'target_projects',
   'azbio,azbio_quiet,cnc,qs3,quick,win',
-  'Which projects need language priming or prompting for single-word tests; provide as a comma-separated list with no spaces.'
+  'Which projects (speech tests) to include in the ASR processing. Provide as a comma-separated list with no spaces.'
 )
 
 # Recognition directions:

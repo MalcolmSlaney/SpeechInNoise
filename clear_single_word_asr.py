@@ -6,6 +6,9 @@ This script maps the relationship from audio_asr -> audio_results
 cnc, win, or nu6 projects. It then updates those the ASR data fields to be 
 an empty string ("").
 
+The project name "all" means remove the ASR results for all rows in the 
+database.
+
 It includes a dry-run mode that defaults to True. There is a small 
 check to the SQL queries (AND aa.data != '') so it only flags or updates rows 
 that actually need changing, saving you from processing rows that are already 
@@ -67,6 +70,11 @@ except flags.DuplicateFlagError:
     pass # Flag was already defined by another module during pytest collection
 flags.DEFINE_string('word', '%', 
                     'The word to target for clearing ASR data. Use % for all words, or specify a single word.')
+flags.DEFINE_list(
+    'target_projects',
+    ['cnc', 'win', 'nu6'],
+    'Projects to target for clearing ASR data.',
+)
 
 def main(argv):
     del argv  # Unused, but required by absl.app
@@ -83,15 +91,26 @@ def main(argv):
     print_asr_data_counts(cursor)  # Show the current state of ASR data before any changes
 
     try:
-        # Define the target projects
-        target_projects = ('cnc', 'win', 'nu6')
-        # Create a parameterized string for the IN clause based on the tuple length
-        placeholders = ', '.join(['?'] * len(target_projects))
+        # Define the target projects from the command-line flag.
+        target_projects = tuple(project.strip() for project in FLAGS.target_projects if project.strip())
+        clear_all_projects = any(project.lower() == 'all' for project in target_projects)
+        if clear_all_projects:
+            project_filter_sql = ""
+            project_params = tuple()
+            project_scope_text = "all projects"
+        else:
+            if not target_projects:
+                print("No target projects were provided. Use --target_projects or --target_projects=all.")
+                return
+            placeholders = ', '.join(['?'] * len(target_projects))
+            project_filter_sql = f"AND LOWER(at.project) IN ({placeholders})"
+            project_params = tuple(project.lower() for project in target_projects)
+            project_scope_text = str(target_projects)
 
         if FLAGS.dry_run:
             # --- DRY RUN LOGIC ---
             print("\n=== DRY RUN MODE ACTIVATED ===")
-            print(f"Checking for ASR data linked to projects: {target_projects}")
+            print(f"Checking for ASR data linked to: {project_scope_text}")
             
             # Select rows that WOULD be modified (ignoring ones that are already empty)
             select_query = f"""
@@ -99,11 +118,12 @@ def main(argv):
                 FROM audio_asr aa
                 JOIN audio_results ar ON aa.ref = ar.id
                 JOIN audio_trials at ON ar.trial = at.id
-                WHERE at.project IN ({placeholders})
+                WHERE 1=1
+                  {project_filter_sql}
                   AND LOWER(at.answer) LIKE '{FLAGS.word.lower()}'
                   AND IFNULL(aa.data, ' ') != '';
             """
-            cursor.execute(select_query, target_projects)
+            cursor.execute(select_query, project_params)
             rows = cursor.fetchall()
             
             if rows:
@@ -121,7 +141,7 @@ def main(argv):
         else:
             # --- ACTUAL UPDATE LOGIC ---
             print("\n=== EXECUTION MODE ACTIVATED ===")
-            print(f"Updating ASR data for projects: {target_projects}")
+            print(f"Updating ASR data for: {project_scope_text}")
             
             # Update the data to an empty string
             update_query = f"""
@@ -131,12 +151,13 @@ def main(argv):
                     SELECT ar.id
                     FROM audio_results ar
                     JOIN audio_trials at ON ar.trial = at.id
-                    WHERE at.project IN ({placeholders})
+                    WHERE 1=1
+                      {project_filter_sql}
                       AND LOWER(at.answer) LIKE '{FLAGS.word.lower()}'
                 )
                 AND IFNULL(data, ' ') != '';
             """
-            cursor.execute(update_query, target_projects)
+            cursor.execute(update_query, project_params)
             updated_rows = cursor.rowcount
             
             # Commit the changes
