@@ -87,6 +87,11 @@ flags.DEFINE_boolean(
     False,
     'Enable verbose debug output during ASR processing.'
 )
+flags.DEFINE_boolean(
+    'verbose',
+    False,
+    'Enable verbose output during ASR processing.'
+)
 flags.DEFINE_integer(
     'count',
     0,
@@ -441,7 +446,7 @@ def get_audio_queue(
     return q
 
 
-def update(con: sqlite3.Connection, rowid: int, res: dict):
+def update(con: sqlite3.Connection, rowid: int, res: dict, verbose: bool = False):
     """Write ASR results into the database for a single trial.
 
     Args:
@@ -459,7 +464,8 @@ def update(con: sqlite3.Connection, rowid: int, res: dict):
     try:
         cur.execute(sql, (rowid, res_json))
         con.commit()
-        print(f'Updating audio_asr for ref {rowid} with ASR result {res_json}.')
+        if verbose:
+            print(f'Updating audio_asr for ref {rowid} with ASR result {res_json}.')
     except Exception as exc:
         print(
             f'Failed to update audio_asr for ref {rowid} with ASR result {res_json}: {exc}'
@@ -617,6 +623,7 @@ def main(asr_class_name: str,
          target_projects: List[str] = ['cnc', 'win', 'nu6'],
          count: int = 0,
          debug: bool = False,
+         verbose: bool = False,
          ):
     """Process pending audio results through Whisper ASR.
 
@@ -675,7 +682,7 @@ def main(asr_class_name: str,
                     print(f"\n[!] Error on row {rowid}: {error}")
                     continue
                 if asr_result:
-                    update(con, rowid, asr_result)
+                    update(con, rowid, asr_result, verbose=verbose)
                     row_count += 1
                 sys.stdout.flush()  # Ensure progress bar updates correctly
         else:
@@ -690,7 +697,7 @@ def main(asr_class_name: str,
                         print(f"\n[!] Error on row {rowid}: {error}")
                         continue
                     if asr_result:
-                        update(con, rowid, asr_result)
+                        update(con, rowid, asr_result, verbose=verbose)
                         row_count += 1
                     sys.stdout.flush()  # Ensure progress bar updates correctly
 
@@ -846,7 +853,8 @@ def run_main(argv):
         valid_word_map=project_word_map,
         target_projects=FLAGS.target_projects,
         count=FLAGS.count,
-        debug=FLAGS.debug)
+        debug=FLAGS.debug,
+        verbose=FLAGS.verbose)
 
 
 if __name__ == '__main__':
