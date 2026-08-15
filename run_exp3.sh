@@ -20,7 +20,7 @@ SOURCE_DB="$SCRIPT_DIR/../jnd.emily/experiments.db"
 
 # Arguments always passed to offline_asr.py for every job.
 # Example: COMMON_ARGS=(--audiodir=uploads --num_workers=6)
-COMMON_ARGS=(--target_projects=quick,win --num_workers=6)
+COMMON_ARGS=(--target_projects=quick,win --num_workers=10)
 
 mkdir -p "$RUN_DIR"
 
@@ -40,7 +40,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   [[ "$line" =~ ^[[:space:]]*# ]] && continue
 
   # First token is TAG, remainder is argument string.
-  IFS=' ' read -r tag rest <<< "$line"
+  # Allow either spaces or tabs (and optional leading whitespace).
+  trimmed_line="${line#"${line%%[![:space:]]*}"}"
+  tag="${trimmed_line%%[[:space:]]*}"
+  rest="${trimmed_line#"$tag"}"
+  rest="${rest#"${rest%%[![:space:]]*}"}"
   if [[ -z "$tag" ]]; then
     continue
   fi
