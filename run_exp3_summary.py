@@ -103,7 +103,7 @@ def create_plot(tags: List[str], correlations: Dict[str, List[Optional[float]]],
     axis.axhline(0.0, color="black", linestyle="--", linewidth=0.8, alpha=0.7)
     axis.set_xticks(x)
     axis.set_xticklabels(tags, rotation=45, ha="right")
-    axis.set_ylim(-1.0, 1.0)
+    axis.set_ylim(0.0, 1.0)
     axis.set_xlabel("Tag")
     axis.set_ylabel("Pearson correlation (ASR vs. Raters)")
     axis.set_title("ASR-vs-Raters Correlation by Tag and Project")

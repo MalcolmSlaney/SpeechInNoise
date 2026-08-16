@@ -140,8 +140,8 @@ def main(argv):
 
         else:
             # --- ACTUAL UPDATE LOGIC ---
-            print("\n=== EXECUTION MODE ACTIVATED ===")
-            print(f"Updating ASR data for: {project_scope_text}")
+            print("\n=== CLEAR EXECUTION MODE ACTIVATED ===")
+            print(f"Clearing ASR data for: {project_scope_text}")
             
             # Update the data to an empty string
             update_query = f"""

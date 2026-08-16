@@ -49,6 +49,9 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     continue
   fi
 
+  echo
+  echo
+  echo "=== Processing ASR for tag: $tag ==="
   tag_dir="$RUN_DIR/$tag"
   tag_db="$tag_dir/experiments.db"
   mkdir -p "$tag_dir"
