@@ -55,7 +55,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   echo "=== Processing ASR for tag: $tag ==="
   tag_dir="$RUN_DIR/$tag"
   tag_db="$tag_dir/experiments.db"
-  done_file="$tag_dir/run_exp3_residual_std_ratio.png"
+  done_file="$tag_dir/summarize_raters_win.log"
 
   if [[ -f "$done_file" ]]; then
     echo "[$tag] Found $done_file, skipping database copy/ASR/summarize steps."
