@@ -6,6 +6,7 @@ set -euo pipefail
 #   TAG <offline_asr.py arguments...>
 #
 # For each TAG, this script:
+# 0) if run_exp3/TAG/run_exp3_residual_std_ratio.png already exists, skip TAG
 # 1) creates run_exp3/TAG if needed
 # 2) copies ../jnd.emily/experiments.db to run_exp3/TAG/experiments.db if not already there
 # 2a) runs clear_single_word_asr.py to clear any existing ASR results for the target projects
@@ -54,6 +55,13 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   echo "=== Processing ASR for tag: $tag ==="
   tag_dir="$RUN_DIR/$tag"
   tag_db="$tag_dir/experiments.db"
+  done_file="$tag_dir/run_exp3_residual_std_ratio.png"
+
+  if [[ -f "$done_file" ]]; then
+    echo "[$tag] Found $done_file, skipping database copy/ASR/summarize steps."
+    continue
+  fi
+
   mkdir -p "$tag_dir"
 
   if [[ ! -f "$tag_db" ]]; then
