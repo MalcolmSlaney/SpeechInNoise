@@ -21,7 +21,8 @@ SOURCE_DB="$SCRIPT_DIR/../jnd.emily/experiments.db"
 
 # Arguments always passed to offline_asr.py for every job.
 # Example: COMMON_ARGS=(--audiodir=uploads --num_workers=6)
-COMMON_ARGS=(--target_projects=quick,win --num_workers=10)
+# Num workers = 2 seems to work well for 30 cores
+COMMON_ARGS=(--target_projects=quick,win --num_workers=2)
 
 mkdir -p "$RUN_DIR"
 

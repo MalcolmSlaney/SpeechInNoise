@@ -10,3 +10,9 @@ small	--model=small
 medium.en	--model=medium.en
 medium	--model=medium
 large	--model=large
+
+small.en_exact_-10  --model=small.en --use_forced --oov_penalty=-10
+small.en_exact_0  --model=small.en --use_forced --oov_penalty=0
+small.en_exact_10  --model=small.en --use_forced --oov_penalty=10
+small.en_exact_20  --model=small.en --use_forced --oov_penalty=20
+small.en_exact_100  --model=small.en --use_forced --oov_penalty=100
