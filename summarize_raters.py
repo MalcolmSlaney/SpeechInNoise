@@ -110,11 +110,11 @@ flags.DEFINE_string("residual_plot", "residual_summary.png", "PNG file for the p
 flags.DEFINE_bool("no_residual_plot", False, "Do not create the per-subject residual histogram plot.")
 flags.DEFINE_bool("show_regression", False, "Show OLS and slope-1 regression lines on the summary scatter plots.")
 flags.DEFINE_enum(
-    "residual_mean_mode",
-    "utterance",
-    ["utterance", "project_snr"],
-    "Residual baseline mode: 'utterance' uses the mean rater score for each utterance; "
-    "'project_snr' uses the mean rater score across utterances with the same project and SNR.",
+    "residual_normalization",
+    "normalization_by_utterance",
+    ["normalization_by_utterance", "normalization_by_snr"],
+    "Residual normalization mode: 'normalization_by_utterance' uses the mean rater score for each utterance; "
+    "'normalization_by_snr' uses the mean rater score across utterances with the same project and SNR.",
 )
 
 
@@ -656,12 +656,12 @@ def create_residual_plot(
 ) -> None:
     """Create and save a histogram of mean-subtracted ASR and rater scores.
 
-    Residual baselines use professional+student rater scores and are controlled
-    by ``--residual_mean_mode``:
+        Residual baselines use professional+student rater scores and are controlled
+        by ``--residual_normalization``:
 
-    * ``utterance``: baseline is the mean rater score for each utterance.
-    * ``project_snr``: baseline is the mean rater score across utterances with
-      the same project and SNR.
+        * ``normalization_by_utterance``: baseline is the mean rater score for each utterance.
+        * ``normalization_by_snr``: baseline is the mean rater score across utterances
+            with the same project and SNR.
 
     Args:
         rows: Raw trial rows as returned by :func:`fetch_trials`.
@@ -695,7 +695,7 @@ def create_residual_plot(
     }
 
     baseline_by_utterance: Dict[Tuple[str, Any, Any], float] = {}
-    if FLAGS.residual_mean_mode == "utterance":
+    if FLAGS.residual_normalization == "normalization_by_utterance":
         baseline_by_utterance = utterance_means
     else:
         # Compute project/SNR baseline as the mean across utterance means.
@@ -757,7 +757,7 @@ def create_residual_plot(
     axis.hist(asr_residuals, bins=bins, alpha=0.6, color="steelblue", label="ASR residuals")
     axis.hist(rater_residuals, bins=bins, alpha=0.6, color="crimson", label="Rater residuals")
     axis.axvline(0, color="black", linewidth=0.8, linestyle="--")
-    if FLAGS.residual_mean_mode == "utterance":
+    if FLAGS.residual_normalization == "normalization_by_utterance":
         axis.set_xlabel("Score - per-utterance mean rater score")
         axis.set_title("Residuals after removing per-utterance rater baseline")
     else:

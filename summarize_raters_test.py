@@ -1,7 +1,7 @@
 """Tests for summarize_raters.py.
 
-These tests focus on the residual baseline modes introduced by
---residual_mean_mode.
+These tests focus on the residual normalization modes introduced by
+--residual_normalization.
 """
 
 import os
@@ -54,7 +54,7 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
           ASR score = 0.0
           Rater scores = [1.0, 1.0]
           Utterance rater mean = 1.0
-        Mode 1: utterance baseline
+        Normalization by utterance
 
           Baselines:
             u1 baseline = 0.5
@@ -75,7 +75,7 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
           Ratio:
             0.75 / 0.353553... = 2.121320... ≈ 2.1213
 
-        Mode 2: project_snr baseline
+        Normalization by SNR
 
           Baseline for both utterances:
             mean of utterance means = (0.5 + 1.0)/2 = 0.75
@@ -96,8 +96,8 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
             0.5 / 0.4330127... = 1.154700... ≈ 1.1547
 
         Expected residual std-ratio (ASR/Rater):
-          mode=utterance   -> ~2.1213
-          mode=project_snr -> ~1.1547
+          mode=normalization_by_utterance -> ~2.1213
+          mode=normalization_by_snr       -> ~1.1547
         """
         conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
@@ -171,9 +171,9 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
         conn.commit()
         conn.close()
 
-    def _run_and_extract_ratio(self, residual_mean_mode: str) -> float:
-        residual_plot = os.path.join(self.temp_dir, f"residual_{residual_mean_mode}.png")
-        output_csv = os.path.join(self.temp_dir, f"summary_{residual_mean_mode}.csv")
+    def _run_and_extract_ratio(self, residual_normalization: str) -> float:
+        residual_plot = os.path.join(self.temp_dir, f"residual_{residual_normalization}.png")
+        output_csv = os.path.join(self.temp_dir, f"summary_{residual_normalization}.csv")
 
         cmd = [
             sys.executable,
@@ -188,7 +188,7 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
             "--rater_type", "all",
             "--output", output_csv,
             "--residual_plot", residual_plot,
-            "--residual_mean_mode", residual_mean_mode,
+            "--residual_normalization", residual_normalization,
             "--no_plot",
             "--no_subject_plot",
         ]
@@ -219,16 +219,16 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
         return float(token)
 
     def test_residual_mean_mode_utterance(self):
-        ratio = self._run_and_extract_ratio("utterance")
+        ratio = self._run_and_extract_ratio("normalization_by_utterance")
         self.assertAlmostEqual(ratio, 2.1213, places=3)
 
     def test_residual_mean_mode_project_snr(self):
-        ratio = self._run_and_extract_ratio("project_snr")
+        ratio = self._run_and_extract_ratio("normalization_by_snr")
         self.assertAlmostEqual(ratio, 1.1547, places=3)
 
     def test_residual_mean_modes_produce_different_ratios(self):
-        ratio_utterance = self._run_and_extract_ratio("utterance")
-        ratio_project_snr = self._run_and_extract_ratio("project_snr")
+        ratio_utterance = self._run_and_extract_ratio("normalization_by_utterance")
+        ratio_project_snr = self._run_and_extract_ratio("normalization_by_snr")
         self.assertNotAlmostEqual(ratio_utterance, ratio_project_snr, places=2)
 
 
