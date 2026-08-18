@@ -109,6 +109,13 @@ flags.DEFINE_bool("no_subject_plot", False, "Do not create the per-subject rater
 flags.DEFINE_string("residual_plot", "residual_summary.png", "PNG file for the per-subject residual histogram plot.")
 flags.DEFINE_bool("no_residual_plot", False, "Do not create the per-subject residual histogram plot.")
 flags.DEFINE_bool("show_regression", False, "Show OLS and slope-1 regression lines on the summary scatter plots.")
+flags.DEFINE_enum(
+    "residual_mean_mode",
+    "utterance",
+    ["utterance", "project_snr"],
+    "Residual baseline mode: 'utterance' uses the mean rater score for each utterance; "
+    "'project_snr' uses the mean rater score across utterances with the same project and SNR.",
+)
 
 
 def read_professional_raters(filename: str) -> Set[str]:
@@ -294,7 +301,7 @@ def fetch_trials(
 
     Returns:
         List of :class:`sqlite3.Row` objects with columns: ``user``,
-        ``username``, ``project``, ``snr``, ``answer``,
+        ``username``, ``project``, ``snr``, ``answer``, ``utterance_id``,
         ``audio_annotation_data``, ``review_annotation_data``,
         ``audio_asr_data``, ``labeler_username``.
     """
@@ -310,6 +317,7 @@ def fetch_trials(
                 at.project,
                 at.snr,
                 at.answer,
+                ar.id AS utterance_id,
                 aa.data AS audio_annotation_data,
                 ra.data AS review_annotation_data,
                 asr.data AS audio_asr_data,
@@ -646,12 +654,14 @@ def create_residual_plot(
     professional_raters: Set[str],
     student_raters: Set[str],
 ) -> None:
-    """Create and save a histogram of per-subject-mean-subtracted ASR and rater scores.
+    """Create and save a histogram of mean-subtracted ASR and rater scores.
 
-    For each subject, the mean rater score (professional + student only) is
-    computed and subtracted from both the subject's ASR score and each
-    individual rater's score. The resulting residuals are collected across all
-    subjects and plotted as overlapping histograms.
+    Residual baselines use professional+student rater scores and are controlled
+    by ``--residual_mean_mode``:
+
+    * ``utterance``: baseline is the mean rater score for each utterance.
+    * ``project_snr``: baseline is the mean rater score across utterances with
+      the same project and SNR.
 
     Args:
         rows: Raw trial rows as returned by :func:`fetch_trials`.
@@ -663,41 +673,65 @@ def create_residual_plot(
 
     valid_raters = professional_raters | student_raters
 
-    # Accumulate per-subject ASR and per-(subject,rater) review scores
-    asr_scores: Dict[Any, List[float]] = defaultdict(list)
-    rater_scores: Dict[Tuple[Any, str], List[float]] = defaultdict(list)
+    # Accumulate per-utterance ASR and review scores for valid raters.
+    # Key: (project, snr, utterance_id)
+    asr_scores: Dict[Tuple[str, Any, Any], float] = {}
+    utterance_rater_scores: Dict[Tuple[str, Any, Any], List[float]] = defaultdict(list)
 
     for row in rows:
-        subject = row["user"]
-        matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
-        asr_scores[subject].append(matched / FLAGS.max_words)
+        utterance_key = (row["project"], row["snr"], row["utterance_id"])
+        if utterance_key not in asr_scores:
+            matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
+            asr_scores[utterance_key] = matched / FLAGS.max_words
         if row["labeler_username"] in valid_raters:
-            rater_scores[(subject, row["labeler_username"])].append(
+            utterance_rater_scores[utterance_key].append(
                 fraction_true(row["review_annotation_data"])
             )
 
-    # Compute per-subject mean rater score (professional + student only)
-    subject_rater_mean: Dict[Any, float] = {}
-    for subject in asr_scores:
-        subject_rater_vals = [
-            sum(scores) / len(scores)
-            for (subj, _rater), scores in rater_scores.items()
-            if subj == subject
-        ]
-        if subject_rater_vals:
-            subject_rater_mean[subject] = sum(subject_rater_vals) / len(subject_rater_vals)
+    utterance_means: Dict[Tuple[str, Any, Any], float] = {
+        key: (sum(scores) / len(scores))
+        for key, scores in utterance_rater_scores.items()
+        if scores
+    }
 
-    # Subtract per-subject mean from ASR and rater scores
+    baseline_by_utterance: Dict[Tuple[str, Any, Any], float] = {}
+    if FLAGS.residual_mean_mode == "utterance":
+        baseline_by_utterance = utterance_means
+    else:
+        # Compute project/SNR baseline as the mean across utterance means.
+        project_snr_to_utterance_means: Dict[Tuple[str, Any], List[float]] = defaultdict(list)
+        for (project, snr, _utterance_id), mean_value in utterance_means.items():
+            project_snr_to_utterance_means[(project, snr)].append(mean_value)
+        project_snr_baseline = {
+            key: (sum(values) / len(values))
+            for key, values in project_snr_to_utterance_means.items()
+            if values
+        }
+        baseline_by_utterance = {
+            (project, snr, utterance_id): project_snr_baseline[(project, snr)]
+            for (project, snr, utterance_id) in utterance_means
+            if (project, snr) in project_snr_baseline
+        }
+
     asr_residuals = [
-        sum(scores) / len(scores) - subject_rater_mean[subject]
-        for subject, scores in asr_scores.items()
-        if subject in subject_rater_mean
+        asr_scores[key] - baseline_by_utterance[key]
+        for key in asr_scores
+        if key in baseline_by_utterance
     ]
-    rater_residuals = [
-        sum(scores) / len(scores) - subject_rater_mean[subject]
-        for (subject, _rater), scores in rater_scores.items()
-        if subject in subject_rater_mean
-    ]
+    rater_residuals: List[float] = []
+    for key, scores in utterance_rater_scores.items():
+        if key not in baseline_by_utterance:
+            continue
+        baseline = baseline_by_utterance[key]
+        rater_residuals.extend(score - baseline for score in scores)
+
+    if not asr_residuals or not rater_residuals:
+        print(
+            "Residual standard deviation summary: "
+            "ASR=nan (n=0), Rater=nan (n=0), ASR/Rater=nan"
+        )
+        print("Skipping residual plot: no valid residuals available.")
+        return
 
     def population_std(values: List[float]) -> float:
         if not values:
@@ -723,9 +757,13 @@ def create_residual_plot(
     axis.hist(asr_residuals, bins=bins, alpha=0.6, color="steelblue", label="ASR residuals")
     axis.hist(rater_residuals, bins=bins, alpha=0.6, color="crimson", label="Rater residuals")
     axis.axvline(0, color="black", linewidth=0.8, linestyle="--")
-    axis.set_xlabel("Score − per-subject mean rater score")
+    if FLAGS.residual_mean_mode == "utterance":
+        axis.set_xlabel("Score - per-utterance mean rater score")
+        axis.set_title("Residuals after removing per-utterance rater baseline")
+    else:
+        axis.set_xlabel("Score - mean rater score for matching project/SNR")
+        axis.set_title("Residuals after removing project/SNR rater baseline")
     axis.set_ylabel("Count")
-    axis.set_title("Distribution of residuals after removing per-subject rater baseline")
     axis.legend(fontsize=9)
     axis.grid(True, axis="y", linestyle="--", alpha=0.5)
     figure.tight_layout()
