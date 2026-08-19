@@ -108,10 +108,15 @@ flags.DEFINE_string("subject_plot", "subject_rater_summary.png", "PNG file for t
 flags.DEFINE_bool("no_subject_plot", False, "Do not create the per-subject rater comparison plot.")
 flags.DEFINE_string("residual_plot", "residual_summary.png", "PNG file for the per-subject residual histogram plot.")
 flags.DEFINE_bool("no_residual_plot", False, "Do not create the per-subject residual histogram plot.")
+flags.DEFINE_integer(
+    "residual_debug_points",
+    2,
+    "Number of residual data points to print with raw values, baselines, and residuals (0 disables).",
+)
 flags.DEFINE_bool("show_regression", False, "Show OLS and slope-1 regression lines on the summary scatter plots.")
 flags.DEFINE_enum(
     "residual_normalization",
-    "normalization_by_utterance",
+    "normalization_by_snr",
     ["normalization_by_utterance", "normalization_by_snr"],
     "Residual normalization mode: 'normalization_by_utterance' uses the mean rater score for each utterance; "
     "'normalization_by_snr' uses the mean rater score across utterances with the same project and SNR.",
@@ -724,6 +729,55 @@ def create_residual_plot(
             continue
         baseline = baseline_by_utterance[key]
         rater_residuals.extend(score - baseline for score in scores)
+
+    debug_point_count = max(0, FLAGS.residual_debug_points)
+    if debug_point_count:
+        print(
+            f"Residual debug samples (mode={FLAGS.residual_normalization}, count={debug_point_count}):"
+        )
+        if FLAGS.residual_normalization == "normalization_by_utterance":
+            sample_keys = sorted(baseline_by_utterance.keys())[:debug_point_count]
+            for key in sample_keys:
+                project, snr, utterance_id = key
+                baseline = baseline_by_utterance[key]
+                asr_value = asr_scores.get(key)
+                rater_values = utterance_rater_scores.get(key, [])
+                asr_residual = asr_value - baseline if asr_value is not None else float("nan")
+                rater_res = [value - baseline for value in rater_values]
+                print(
+                    "  utterance "
+                    f"project={project}, snr={snr}, utterance_id={utterance_id}: "
+                    f"asr={asr_value:.4f}, raters={rater_values}, baseline={baseline:.4f}, "
+                    f"asr_residual={asr_residual:.4f}, rater_residuals={rater_res}"
+                )
+        else:
+            snr_buckets: Dict[Tuple[str, Any], List[Tuple[str, Any, Any]]] = defaultdict(list)
+            for key in baseline_by_utterance:
+                project, snr, _utterance_id = key
+                snr_buckets[(project, snr)].append(key)
+            sample_buckets = sorted(snr_buckets.keys())[:debug_point_count]
+            for bucket in sample_buckets:
+                project, snr = bucket
+                bucket_keys = sorted(snr_buckets[bucket])
+                baseline = baseline_by_utterance[bucket_keys[0]]
+                utterance_rows = []
+                for key in bucket_keys:
+                    asr_value = asr_scores.get(key)
+                    rater_values = utterance_rater_scores.get(key, [])
+                    utterance_rows.append(
+                        {
+                            "utterance_id": key[2],
+                            "asr": asr_value,
+                            "raters": rater_values,
+                            "asr_residual": (asr_value - baseline) if asr_value is not None else float("nan"),
+                            "rater_residuals": [value - baseline for value in rater_values],
+                        }
+                    )
+                print(
+                    "  snr-bucket "
+                    f"project={project}, snr={snr}: baseline={baseline:.4f}, "
+                    f"utterances={utterance_rows}"
+                )
 
     if not asr_residuals or not rater_residuals:
         print(

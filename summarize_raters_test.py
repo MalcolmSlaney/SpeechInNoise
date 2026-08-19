@@ -50,6 +50,7 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
           ASR score = 1.0
           Rater scores = [1.0, 0.0]
           Utterance rater mean = 0.5
+
           Utterance 2:
           ASR score = 0.0
           Rater scores = [1.0, 1.0]
