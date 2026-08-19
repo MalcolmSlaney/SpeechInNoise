@@ -54,6 +54,7 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
           ASR score = 0.0
           Rater scores = [1.0, 1.0]
           Utterance rater mean = 1.0
+
         Normalization by utterance
 
           Baselines:

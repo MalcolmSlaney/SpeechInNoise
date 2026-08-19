@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 from absl import app
 from absl import flags
 
@@ -32,6 +33,7 @@ flags.DEFINE_string(
 )
 
 PROJECTS = ("quick", "win")
+BAD_MODEL_TAGS = {"large_exact_-10"}
 PEARSON_RE = re.compile(r"Pearson=([-+]?\d*\.?\d+|nan)", re.IGNORECASE)
 STD_RATIO_RE = re.compile(r"ASR/Rater=([-+]?\d*\.?\d+|nan)", re.IGNORECASE)
 
@@ -140,7 +142,10 @@ def create_plot(tags: List[str], correlations: Dict[str, List[Optional[float]]],
 
     for project in PROJECTS:
         y_values = correlations[project]
-        y_plot = [float("nan") if value is None else value for value in y_values]
+        y_plot = [
+            np.nan if (value is None or tags[i] in BAD_MODEL_TAGS) else value
+            for i, value in enumerate(y_values)
+        ]
         axis.plot(x, y_plot, marker="o", linewidth=1.8, label=project, color=colors[project])
 
     axis.axhline(0.0, color="black", linestyle="--", linewidth=0.8, alpha=0.7)
@@ -168,7 +173,10 @@ def create_ratio_plot(tags: List[str], std_ratios: Dict[str, List[Optional[float
 
     for project in PROJECTS:
         y_values = std_ratios[project]
-        y_plot = [float("nan") if value is None else value for value in y_values]
+        y_plot = [
+            np.nan if (value is None or tags[i] in BAD_MODEL_TAGS) else value
+            for i, value in enumerate(y_values)
+        ]
         axis.plot(x, y_plot, marker="o", linewidth=1.8, label=project, color=colors[project])
 
     axis.axhline(1.0, color="black", linestyle="--", linewidth=0.8, alpha=0.7)
