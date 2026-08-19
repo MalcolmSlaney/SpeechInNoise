@@ -11,7 +11,8 @@ set -euo pipefail
 # 2) copies ../jnd.emily/experiments.db to run_exp3/TAG/experiments.db if not already there
 # 2a) runs clear_single_word_asr.py to clear any existing ASR results for the target projects
 # 3) runs offline_asr.py with the given arguments
-# 4) runs summarize_raters.py for each of the target projects (quick, win) and 
+# 4) runs score_and_report.py and writes CSV output to run_exp3/TAG/quicksin_results.csv
+# 5) runs summarize_raters.py for each of the target projects (quick, win) and
 #     saves the output to run_exp3/TAG/summarize_raters_PROJECT.log
 #
 # Flags:
@@ -102,6 +103,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 
   echo "[$tag] Running: ${cmd[*]}"
   "${cmd[@]}"
+
+  score_csv="$tag_dir/quicksin_results.csv"
+  score_cmd=(python "$SCRIPT_DIR/score_and_report.py" --dbfile "$tag_db" --csv_output "$score_csv")
+  echo "[$tag] Running: ${score_cmd[*]}"
+  "${score_cmd[@]}"
 
   for project in quick win; do
     summary_log="$tag_dir/summarize_raters_${project}.log"

@@ -35,10 +35,11 @@ FLAGS = flags.FLAGS
 
 # Define command-line flags
 try:
-  flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 'Path to the SQLite database.')
+    flags.DEFINE_string('dbfile', 'experiments.db', 'Path to the SQLite database.')
 except flags.DuplicateFlagError:
   pass # Flag was already defined by another module during pytest collection
 flags.DEFINE_string('homonyms', 'homonym_list.csv', 'Path to the comma-delimited homonyms file.')
+flags.DEFINE_string('csv_output', 'quicksin_results.csv', 'Where to store the CSV export.')
 flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html', 'Where to store the final discrepancy report.')
 flags.DEFINE_bool('only_foreign', False, 'Whether to only show foreign recognizer results in discrepancies html')
 flags.DEFINE_bool('only_discrepancies', True, 'Whether to only show human/machine discrepancies the final html')
@@ -431,7 +432,7 @@ def main(argv: List[str]) -> None:
     valid_subject_re = re.compile(FLAGS.subject_filter)
     
     # CSV
-    save_results_as_csv(all_results, 'quicksin_results.csv')
+    save_results_as_csv(all_results, FLAGS.csv_output)
 
     # Confusion Matrices
     all_confusions = all_test_confusions(all_results, valid_subject_re=valid_subject_re)
