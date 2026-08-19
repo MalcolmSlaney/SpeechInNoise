@@ -13,6 +13,9 @@ set -euo pipefail
 # 3) runs offline_asr.py with the given arguments
 # 4) runs summarize_raters.py for each of the target projects (quick, win) and 
 #     saves the output to run_exp3/TAG/summarize_raters_PROJECT.log
+#
+# Flags:
+#   --recompute_all  Disable done-file checks and recompute all tags.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUN_DIR="$SCRIPT_DIR/run_exp3"
@@ -23,6 +26,24 @@ SOURCE_DB="$SCRIPT_DIR/../jnd.emily/experiments.db"
 # Example: COMMON_ARGS=(--audiodir=uploads --num_workers=6)
 # Num workers = 2 seems to work well for 30 cores
 COMMON_ARGS=(--target_projects=quick,win --num_workers=2)
+
+RECOMPUTE_ALL=false
+for arg in "$@"; do
+  case "$arg" in
+    --recompute_all)
+      RECOMPUTE_ALL=true
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--recompute_all]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $arg" >&2
+      echo "Usage: $0 [--recompute_all]" >&2
+      exit 2
+      ;;
+  esac
+done
 
 mkdir -p "$RUN_DIR"
 
@@ -58,7 +79,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   tag_db="$tag_dir/experiments.db"
   done_file="$tag_dir/summarize_raters_win.log"
 
-  if [[ -f "$done_file" ]]; then
+  if [[ "$RECOMPUTE_ALL" != true && -f "$done_file" ]]; then
     echo "[$tag] Found $done_file, skipping database copy/ASR/summarize steps."
     continue
   fi
