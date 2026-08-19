@@ -104,7 +104,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   echo "[$tag] Running: ${cmd[*]}"
   "${cmd[@]}"
 
-  score_csv="$tag_dir/quicksin_results
+  score_csv="$tag_dir/quicksin_results.csv"
   score_cmd=(python "$SCRIPT_DIR/score_and_report.py" --dbfile "$tag_db" --csv_output "$score_csv")
   echo "[$tag] Running: ${score_cmd[*]}"
   "${score_cmd[@]}"
