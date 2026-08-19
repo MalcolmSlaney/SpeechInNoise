@@ -187,9 +187,11 @@ def concatenate_audio_files(input_file1: str, input_file2: str) -> str:
   Raises:
       RuntimeError: If ffmpeg fails to concatenate the files.
   """
-  temp_output_filename = tempfile.mktemp(suffix='.wav')
+  fd, temp_output_filename = tempfile.mkstemp(suffix='.wav')
+  os.close(fd)
 
-  cmd = ('ffmpeg -i {} -i {} -filter_complex '
+
+  cmd = ('ffmpeg -i {} -i {} -filter_complex --nostdin `'
          '"[0:a]aresample={}[a0];[1:a]aresample={}[a1];'
          '[a0][a1]concat=n=2:v=0:a=1[out]" -map "[out]" {}')
   formatted_cmd = cmd.format(input_file1, input_file2, 22050, 22050, temp_output_filename)
