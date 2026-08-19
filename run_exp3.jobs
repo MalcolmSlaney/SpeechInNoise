@@ -11,8 +11,17 @@ medium.en	--model=medium.en
 medium	--model=medium
 large	--model=large
 
-large_exact_-10  --model=large --use_forced --oov_penalty=-10
-large_exact_0  --model=large --use_forced --oov_penalty=0
-large_exact_10  --model=large --use_forced --oov_penalty=10
-large_exact_20  --model=large --use_forced --oov_penalty=20
-large_exact_100  --model=large --use_forced --oov_penalty=100
+large_prime  --model=large --use_prime 
+large_prompt  --model=large --use_prompt 
+
+large_forced_-10  --model=large --use_forced --oov_penalty=-10
+large_forced_0  --model=large --use_forced --oov_penalty=0
+large_forced_10  --model=large --use_forced --oov_penalty=10
+large_forced_20  --model=large --use_forced --oov_penalty=20
+large_forced_100  --model=large --use_forced --oov_penalty=100
+
+large_exact_-10  --model=large --use_exact --oov_penalty=-10
+large_exact_0  --model=large --use_exact --oov_penalty=0
+large_exact_10  --model=large --use_exact --oov_penalty=10
+large_exact_20  --model=large --use_exact --oov_penalty=20
+large_exact_100  --model=large --use_exact --oov_penalty=100
