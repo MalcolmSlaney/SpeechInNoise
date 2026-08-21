@@ -33,7 +33,7 @@ flags.DEFINE_string(
 )
 
 PROJECTS = ("quick", "win")
-BAD_MODEL_TAGS = {"large_exact_-10"}
+BAD_MODEL_TAGS = {"large_exact_-10", "large_forced_-10"}
 PEARSON_RE = re.compile(r"Pearson=([-+]?\d*\.?\d+|nan)", re.IGNORECASE)
 STD_RATIO_RE = re.compile(r"ASR/Rater=([-+]?\d*\.?\d+|nan)", re.IGNORECASE)
 
