@@ -126,8 +126,8 @@ flags.DEFINE_bool(
     "dump_raw_data",
     False,
     "Dump raw per-utterance data (SNR, test name, ASR fraction correct, and each "
-    "rater's fraction correct) for a single ASR configuration to --raw_output "
-    "instead of writing the usual summary CSV/plots.",
+    "rater's fraction correct) for a single ASR configuration to --raw_output, "
+    "in addition to writing the usual summary CSV/plots.",
 )
 flags.DEFINE_string(
     "asr_model",
@@ -1082,11 +1082,10 @@ def main(argv: List[str]) -> None:
         dataframe = build_raw_dataframe(rows, homonyms, FLAGS.asr_model)
         if dataframe.empty:
             print(f"No rows found for asr_model={FLAGS.asr_model!r}; nothing written.")
-            return
-        dataframe.to_pickle(FLAGS.raw_output)
-        print(f"Wrote {len(dataframe)} utterance rows to {FLAGS.raw_output}")
-        print(dataframe.head())
-        return
+        else:
+            dataframe.to_pickle(FLAGS.raw_output)
+            print(f"Wrote {len(dataframe)} utterance rows to {FLAGS.raw_output}")
+            print(dataframe.head())
     summary = summarize(rows, homonyms, per_trial=FLAGS.per_trial)
     if FLAGS.show_outliers:
         print_outlier_details(rows, homonyms, FLAGS.outlier_asr_max, FLAGS.outlier_audio_min)

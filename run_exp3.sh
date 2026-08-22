@@ -28,6 +28,10 @@ SOURCE_DB="$SCRIPT_DIR/../jnd.emily/experiments.db"
 # Num workers = 2 seems to work well for 30 cores
 COMMON_ARGS=(--target_projects=quick,win --num_workers=2)
 
+# Tags for which summarize_raters.py should also dump raw per-utterance data
+# (via --dump_raw_data) for hand-checking the residual calculation.
+DUMP_RAW_DATA_TAGS=(large)
+
 RECOMPUTE_ALL=false
 for arg in "$@"; do
   case "$arg" in
@@ -109,9 +113,20 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   echo "[$tag] Running: ${score_cmd[*]}"
   "${score_cmd[@]}"
 
+  dump_raw_data=false
+  for dump_tag in "${DUMP_RAW_DATA_TAGS[@]}"; do
+    if [[ "$tag" == "$dump_tag" ]]; then
+      dump_raw_data=true
+      break
+    fi
+  done
+
   for project in quick win; do
     summary_log="$tag_dir/summarize_raters_${project}.log"
     summary_cmd=(python "$SCRIPT_DIR/summarize_raters.py" --dbfile "$tag_db" --project "$project" --residual_plot "$tag_dir/residual_std_ratio_${project}.png" --residual_normalization normalization_by_snr)
+    if [[ "$dump_raw_data" == true ]]; then
+      summary_cmd+=(--dump_raw_data --asr_model="$tag" --raw_output="$tag_dir/residual_raw_data_${project}.pkl")
+    fi
     echo "[$tag] Running: ${summary_cmd[*]} > $summary_log"
     "${summary_cmd[@]}" > "$summary_log" 2>&1
   done
