@@ -121,6 +121,25 @@ flags.DEFINE_enum(
     "Residual normalization mode: 'normalization_by_utterance' uses the mean rater score for each utterance; "
     "'normalization_by_snr' uses the mean rater score across utterances with the same project and SNR.",
 )
+flags.DEFINE_bool(
+    "dump_raw_data",
+    False,
+    "Dump raw per-utterance data (SNR, test name, ASR fraction correct, and each "
+    "rater's fraction correct) for a single ASR configuration to --raw_output "
+    "instead of writing the usual summary CSV/plots.",
+)
+flags.DEFINE_string(
+    "asr_model",
+    "large",
+    "Whisper model_name to filter audio_asr rows to when --dump_raw_data is set "
+    "(matches the 'model_name' key stored in audio_asr.data).",
+)
+flags.DEFINE_string(
+    "raw_output",
+    "residual_raw_data.pkl",
+    "Path to write the raw per-utterance pandas DataFrame (pickle format) when "
+    "--dump_raw_data is set.",
+)
 
 
 def read_professional_raters(filename: str) -> Set[str]:
@@ -195,6 +214,23 @@ def extract_asr_words(asr_data: str) -> List[str]:
     except (AttributeError, json.JSONDecodeError, TypeError):
         return []
     return re.findall(r"\b[a-z0-9']+\b", text)
+
+
+def extract_asr_model_name(asr_data: str) -> Optional[str]:
+    """Return the Whisper ``model_name`` stored in a JSON-encoded ASR result.
+
+    Args:
+        asr_data: JSON string as stored in ``audio_asr.data``.
+
+    Returns:
+        The ``model_name`` value, or ``None`` if missing or unparseable.
+    """
+    if not asr_data:
+        return None
+    try:
+        return json.loads(asr_data).get("model_name")
+    except (AttributeError, json.JSONDecodeError, TypeError):
+        return None
 
 
 def score_trial(answer: str, asr_words: Iterable[str], homonyms: Dict[str, Set[str]]) -> int:
@@ -348,6 +384,65 @@ def fetch_trials(
             if not allowed_raters or row["labeler_username"] in allowed_raters:
                 valid_rows.append(row)
     return valid_rows
+
+
+def build_raw_dataframe(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], asr_model: str) -> "pd.DataFrame":
+    """Build a wide per-utterance DataFrame for a single ASR configuration.
+
+    Meant to let the residual math elsewhere in this module be checked by hand
+    against the raw inputs: one row per utterance with the SNR, test
+    (project) name, the ASR fraction correct, and the fraction correct
+    reported by each individual rater (plus the audiologist annotation, if
+    present) as separate columns.
+
+    Args:
+        rows: Raw trial rows as returned by :func:`fetch_trials`.
+        homonyms: Bidirectional homonym map as returned by :func:`read_homonyms`.
+        asr_model: Whisper ``model_name`` to keep; other rows are dropped.
+
+    Returns:
+        DataFrame indexed by ``utterance_id`` with columns ``project``,
+        ``snr``, ``subject``, ``asr_fraction_correct``,
+        ``audiologist_fraction_correct``, and one ``rater_<username>`` column
+        per distinct labeler.
+    """
+    import pandas as pd
+
+    records = []
+    for row in rows:
+        if extract_asr_model_name(row["audio_asr_data"]) != asr_model:
+            continue
+        matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
+        records.append(
+            {
+                "utterance_id": row["utterance_id"],
+                "project": row["project"],
+                "snr": row["snr"],
+                "subject": row["username"],
+                "asr_fraction_correct": matched / FLAGS.max_words,
+                "audiologist_fraction_correct": fraction_true(row["audio_annotation_data"]),
+                "rater_username": row["labeler_username"],
+                "rater_fraction_correct": fraction_true(row["review_annotation_data"]),
+            }
+        )
+
+    long_df = pd.DataFrame.from_records(records)
+    if long_df.empty:
+        return long_df
+
+    base_columns = ["utterance_id", "project", "snr", "subject", "asr_fraction_correct",
+                     "audiologist_fraction_correct"]
+    base = long_df[base_columns].drop_duplicates(subset="utterance_id").set_index("utterance_id")
+
+    rater_pivot = long_df.pivot_table(
+        index="utterance_id",
+        columns="rater_username",
+        values="rater_fraction_correct",
+        aggfunc="mean",
+    )
+    rater_pivot.columns = [f"rater_{name}" for name in rater_pivot.columns]
+
+    return base.join(rater_pivot).reset_index()
 
 
 def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], per_trial: bool = False) -> List[Dict[str, Any]]:
@@ -981,6 +1076,16 @@ def main(argv: List[str]) -> None:
         FLAGS.excluded_subjects,
         allowed_raters,
     )
+    if FLAGS.dump_raw_data:
+        logging.info(f"Fetched {len(rows)} rows before filtering by asr_model={FLAGS.asr_model}")
+        dataframe = build_raw_dataframe(rows, homonyms, FLAGS.asr_model)
+        if dataframe.empty:
+            print(f"No rows found for asr_model={FLAGS.asr_model!r}; nothing written.")
+            return
+        dataframe.to_pickle(FLAGS.raw_output)
+        print(f"Wrote {len(dataframe)} utterance rows to {FLAGS.raw_output}")
+        print(dataframe.head())
+        return
     summary = summarize(rows, homonyms, per_trial=FLAGS.per_trial)
     if FLAGS.show_outliers:
         print_outlier_details(rows, homonyms, FLAGS.outlier_asr_max, FLAGS.outlier_audio_min)
