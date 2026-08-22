@@ -36,6 +36,7 @@ import csv
 import json
 import logging
 import math
+import pandas as pd
 import re
 import sqlite3
 from collections import defaultdict
@@ -386,7 +387,9 @@ def fetch_trials(
     return valid_rows
 
 
-def build_raw_dataframe(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], asr_model: str) -> "pd.DataFrame":
+def build_raw_dataframe(rows: Iterable[sqlite3.Row], 
+                        homonyms: Dict[str, Set[str]], 
+                        asr_model: str) -> pd.DataFrame:
     """Build a wide per-utterance DataFrame for a single ASR configuration.
 
     Meant to let the residual math elsewhere in this module be checked by hand
@@ -406,8 +409,6 @@ def build_raw_dataframe(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str
         ``audiologist_fraction_correct``, and one ``rater_<username>`` column
         per distinct labeler.
     """
-    import pandas as pd
-
     records = []
     for row in rows:
         if extract_asr_model_name(row["audio_asr_data"]) != asr_model:
