@@ -134,7 +134,7 @@ for line in "${job_lines[@]}"; do
 
   for project in quick win; do
     summary_log="$tag_dir/summarize_raters_${project}.log"
-    summary_cmd=(python "$SCRIPT_DIR/summarize_raters.py" --dbfile "$tag_db" --project "$project" --residual_plot "$tag_dir/residual_std_ratio_${project}.png" --residual_normalization normalization_by_snr)
+    summary_cmd=(python "$SCRIPT_DIR/summarize_raters.py" --dbfile "$tag_db" --project "$project" --residual_plot "$tag_dir/residual_std_ratio_${project}.png" --residual_normalization normalization_by_snr  --add_pseudo_snr)
     if [[ "$dump_raw_data" == true ]]; then
       summary_cmd+=(--dump_raw_data --asr_model="$tag" --raw_output="$tag_dir/residual_raw_data_${project}.pkl")
     fi
