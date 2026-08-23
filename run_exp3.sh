@@ -66,7 +66,12 @@ fi
 # instead would share fd 0 with every subprocess spawned in the loop body; if
 # any of them ever touches stdin, it consumes bytes from the jobs file and the
 # loop silently stops after the first tag.
-mapfile -t job_lines < "$JOBS_FILE"
+# Note: avoid `mapfile`/`readarray` here; macOS ships bash 3.2, which predates
+# both builtins (added in bash 4.0).
+job_lines=()
+while IFS= read -r line || [[ -n "$line" ]]; do
+  job_lines+=("$line")
+done < "$JOBS_FILE"
 
 for line in "${job_lines[@]}"; do
   # Skip blank lines and comments.
