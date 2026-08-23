@@ -36,11 +36,12 @@ import csv
 import json
 import logging
 import math
-import pandas as pd
 import re
 import sqlite3
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+
+import pandas as pd
 
 from absl import app
 from absl import flags
@@ -387,8 +388,8 @@ def fetch_trials(
     return valid_rows
 
 
-def build_raw_dataframe(rows: Iterable[sqlite3.Row], 
-                        homonyms: Dict[str, Set[str]], 
+def build_raw_dataframe(rows: Iterable[sqlite3.Row],
+                        homonyms: Dict[str, Set[str]],
                         asr_model: str) -> pd.DataFrame:
     """Build a wide per-utterance DataFrame for a single ASR configuration.
 

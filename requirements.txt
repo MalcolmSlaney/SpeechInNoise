@@ -6,6 +6,7 @@ openai-whisper
 #OpenAI-whisper @ git+https://github.com/openai/whisper.git
 matplotlib
 numpy<2
+pandas
 scipy
 uWSGI
 pytest
