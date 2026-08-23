@@ -62,7 +62,13 @@ if [[ ! -f "$SOURCE_DB" ]]; then
   exit 1
 fi
 
-while IFS= read -r line || [[ -n "$line" ]]; do
+# Read all job lines into an array up front. Iterating with `while read < file`
+# instead would share fd 0 with every subprocess spawned in the loop body; if
+# any of them ever touches stdin, it consumes bytes from the jobs file and the
+# loop silently stops after the first tag.
+mapfile -t job_lines < "$JOBS_FILE"
+
+for line in "${job_lines[@]}"; do
   # Skip blank lines and comments.
   [[ -z "${line//[[:space:]]/}" ]] && continue
   [[ "$line" =~ ^[[:space:]]*# ]] && continue
@@ -94,7 +100,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   if [[ ! -f "$tag_db" ]]; then
     cp "$SOURCE_DB" "$tag_db"
     chmod 644 "$tag_db"
-    python "$SCRIPT_DIR/clear_single_word_asr.py" --dbfile "$tag_db" --nodry_run --target_projects=all
+    python "$SCRIPT_DIR/clear_single_word_asr.py" --dbfile "$tag_db" --nodry_run --target_projects=all < /dev/null
   fi
 
   # Parse the remainder into an argv array honoring shell-style quoting.
@@ -106,12 +112,12 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   cmd=(python "$SCRIPT_DIR/offline_asr.py" --dbfile "$tag_db" "${COMMON_ARGS[@]}" "${args[@]}")
 
   echo "[$tag] Running: ${cmd[*]}"
-  "${cmd[@]}"
+  "${cmd[@]}" < /dev/null
 
   score_csv="$tag_dir/quicksin_results.csv"
   score_cmd=(python "$SCRIPT_DIR/score_and_report.py" --dbfile "$tag_db" --csv_output "$score_csv")
   echo "[$tag] Running: ${score_cmd[*]}"
-  "${score_cmd[@]}"
+  "${score_cmd[@]}" < /dev/null
 
   dump_raw_data=false
   for dump_tag in "${DUMP_RAW_DATA_TAGS[@]}"; do
@@ -128,6 +134,6 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       summary_cmd+=(--dump_raw_data --asr_model="$tag" --raw_output="$tag_dir/residual_raw_data_${project}.pkl")
     fi
     echo "[$tag] Running: ${summary_cmd[*]} > $summary_log"
-    "${summary_cmd[@]}" > "$summary_log" 2>&1
+    "${summary_cmd[@]}" < /dev/null > "$summary_log" 2>&1
   done
-done < "$JOBS_FILE"
+done
