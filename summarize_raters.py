@@ -71,7 +71,7 @@ flags.DEFINE_list(
     "A2P2",
     "Subject usernames to exclude explicitly.",
 )
-flags.DEFINE_string("output", "rater_summary.csv", "CSV file for the summary.")
+flags.DEFINE_string("output_csv", "rater_summary.csv", "CSV file for the summary.")
 flags.DEFINE_string("plot", "rater_summary.png", "PNG file for the optional plot.")
 flags.DEFINE_bool("no_plot", False, "Do not create the summary plot.")
 flags.DEFINE_integer(
@@ -657,7 +657,7 @@ def write_csv(summary: List[Dict[str, Any]]) -> None:
         "mean_fraction_review_annotation_true",
         "average_matched_word_count", "normalized_matched_word_count",
     ]
-    with open(FLAGS.output, "w", newline="", encoding="utf-8") as file:
+    with open(FLAGS.output_csv, "w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=fields)
         writer.writeheader()
         writer.writerows(summary)
@@ -1210,7 +1210,7 @@ def _run_summary(argv: List[str]) -> None:
         print_outlier_details(rows, homonyms, FLAGS.outlier_asr_max, FLAGS.outlier_audio_min)
     write_csv(summary)
     print_statistics(summary)
-    print(f"Wrote summary to {FLAGS.output}")
+    print(f"Wrote summary to {FLAGS.output_csv}")
     if summary and not FLAGS.no_plot:
         create_plot(summary, per_trial=FLAGS.per_trial)
     if rows and not FLAGS.no_subject_plot:

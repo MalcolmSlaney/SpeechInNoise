@@ -8,10 +8,13 @@ set -euo pipefail
 # For each TAG, this script:
 # 0) if run_exp3/TAG/run_exp3_residual_std_ratio.png already exists, skip TAG
 # 1) creates run_exp3/TAG if needed
-# 2) copies ../jnd.emily/experiments.db to run_exp3/TAG/experiments.db if not already there
-# 2a) runs clear_single_word_asr.py to clear any existing ASR results for the target projects
+# 2) copies ../jnd.emily/experiments.db to
+#    run_exp3/TAG/experiments.db if not already there
+# 2a) runs clear_single_word_asr.py to clear any existing ASR results for
+#     the target projects
 # 3) runs offline_asr.py with the given arguments
-# 4) runs score_and_report.py and writes CSV output to run_exp3/TAG/quicksin_results.csv
+# 4) runs score_and_report.py and writes CSV output to
+#    run_exp3/TAG/quicksin_results.csv
 # 5) runs summarize_raters.py for each of the target projects (quick, win) and
 #     saves the output to run_exp3/TAG/summarize_raters_PROJECT.log
 #
@@ -105,7 +108,13 @@ for line in "${job_lines[@]}"; do
   if [[ ! -f "$tag_db" ]]; then
     cp "$SOURCE_DB" "$tag_db"
     chmod 644 "$tag_db"
-    python "$SCRIPT_DIR/clear_single_word_asr.py" --dbfile "$tag_db" --nodry_run --target_projects=all < /dev/null
+    clear_cmd=(
+      python "$SCRIPT_DIR/clear_single_word_asr.py"
+      --dbfile "$tag_db"
+      --nodry_run
+      --target_projects=all
+    )
+    "${clear_cmd[@]}" < /dev/null
   fi
 
   # Parse the remainder into an argv array honoring shell-style quoting.
@@ -114,13 +123,22 @@ for line in "${job_lines[@]}"; do
     eval "args=($rest)"
   fi
 
-  cmd=(python "$SCRIPT_DIR/offline_asr.py" --dbfile "$tag_db" "${COMMON_ARGS[@]}" "${args[@]}")
+  cmd=(
+    python "$SCRIPT_DIR/offline_asr.py"
+    --dbfile "$tag_db"
+    "${COMMON_ARGS[@]}"
+    "${args[@]}"
+  )
 
   echo "[$tag] Running: ${cmd[*]}"
   "${cmd[@]}" < /dev/null
 
   score_csv="$tag_dir/quicksin_results.csv"
-  score_cmd=(python "$SCRIPT_DIR/score_and_report.py" --dbfile "$tag_db" --csv_output "$score_csv")
+  score_cmd=(
+    python "$SCRIPT_DIR/score_and_report.py"
+    --dbfile "$tag_db"
+    --csv_output "$score_csv"
+  )
   echo "[$tag] Running: ${score_cmd[*]}"
   "${score_cmd[@]}" < /dev/null
 
@@ -134,9 +152,22 @@ for line in "${job_lines[@]}"; do
 
   for project in quick win; do
     summary_log="$tag_dir/summarize_raters_${project}.log"
-    summary_cmd=(python "$SCRIPT_DIR/summarize_raters.py" --dbfile "$tag_db" --project "$project" --residual_plot "$tag_dir/residual_std_ratio_${project}.png" --residual_normalization normalization_by_snr  --add_pseudo_snr --residual_debug_points=10)
+    summary_cmd=(
+      python "$SCRIPT_DIR/summarize_raters.py"
+      --dbfile "$tag_db"
+      --project "$project"
+      --residual_plot "$tag_dir/residual_std_ratio_${project}.png"
+      --residual_normalization normalization_by_snr
+      --output_csv "$tag_dir/summarize_raters_${project}.csv"
+      --add_pseudo_snr
+      --residual_debug_points=10
+    )
     if [[ "$dump_raw_data" == true ]]; then
-      summary_cmd+=(--dump_raw_data --asr_model="$tag" --raw_output="$tag_dir/residual_raw_data_${project}.pkl")
+      summary_cmd+=(
+        --dump_raw_data
+        --asr_model="$tag"
+        --raw_output="$tag_dir/residual_raw_data_${project}.pkl"
+      )
     fi
     echo "[$tag] Running: ${summary_cmd[*]} > $summary_log"
     "${summary_cmd[@]}" < /dev/null > "$summary_log" 2>&1

@@ -212,7 +212,7 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
             "--professional_raters", self.professional_raters_path,
             "--student_raters", self.student_raters_path,
             "--rater_type", "all",
-            "--output", output_csv,
+            "--output_csv", output_csv,
             "--residual_plot", residual_plot,
             "--residual_normalization", residual_normalization,
             "--no_plot",
