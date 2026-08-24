@@ -12,6 +12,30 @@ import sys
 
 from absl.testing import absltest
 
+import summarize_raters as sr
+
+
+class PseudoSnrBucketTest(absltest.TestCase):
+
+    def test_all_eight_buckets_are_reachable(self):
+        breakpoints = ["a", "Dab", "Gaze", "Juice", "Mess", "Ring", "Talk", "Youth", "ZZZZZ"]
+        # Each breakpoint word itself falls in the bucket it closes off.
+        buckets = {
+            i: sr.pseudo_snr_bucket(breakpoints[i], breakpoints)
+            for i in range(1, len(breakpoints))
+        }
+        self.assertEqual(buckets, {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8})
+        self.assertEqual(set(buckets.values()), set(range(1, 9)))
+
+    def test_word_at_lower_sentinel_is_unmatched(self):
+        breakpoints = ["a", "Dab", "Gaze", "Juice", "Mess", "Ring", "Talk", "Youth", "ZZZZZ"]
+        self.assertIsNone(sr.pseudo_snr_bucket("a", breakpoints))
+
+    def test_word_between_breakpoints_uses_case_insensitive_comparison(self):
+        breakpoints = ["a", "Dab", "Gaze", "Juice", "Mess", "Ring", "Talk", "Youth", "ZZZZZ"]
+        self.assertEqual(sr.pseudo_snr_bucket("fig", breakpoints), 2)
+        self.assertEqual(sr.pseudo_snr_bucket("FIG", breakpoints), 2)
+
 
 class SummarizeRatersResidualModeTest(absltest.TestCase):
 
