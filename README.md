@@ -20,7 +20,7 @@ combined into the same group rather than producing separate dots:
 
 * audiologist true fraction from `audio_annotations.data`;
 * rerater true fraction from `review_annotations.data`; and
-* ASR matched-word count normalized by `--max_words` (5 by default).
+* ASR matched-word count normalized by the number of words in each answer.
 
 The three plot panels compare audiologist versus rerater fractions, normalized
 ASR versus audiologist fraction, and normalized ASR versus rerater fraction.

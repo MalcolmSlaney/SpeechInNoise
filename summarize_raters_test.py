@@ -17,6 +17,10 @@ import summarize_raters as sr
 
 class PseudoSnrBucketTest(absltest.TestCase):
 
+    def test_normalize_asr_score_uses_answer_word_count(self):
+        self.assertEqual(sr.normalize_asr_score("one two", 1), 0.5)
+        self.assertEqual(sr.normalize_asr_score("", 1), 0.0)
+
     def test_all_eight_buckets_are_reachable(self):
         breakpoints = ["a", "Dab", "Gaze", "Juice", "Mess", "Ring", "Talk", "Youth", "ZZZZZ"]
         # Each breakpoint word itself falls in the bucket it closes off.
@@ -178,7 +182,7 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
         cur.execute("INSERT INTO audio_results (id, subject, trial) VALUES (201, 1, 11)")
         cur.execute("INSERT INTO audio_results (id, subject, trial) VALUES (202, 1, 12)")
 
-        # ASR: utterance 1 matches (1.0 when max_words=1), utterance 2 does not (0.0).
+        # ASR: utterance 1 matches, utterance 2 does not.
         cur.execute("INSERT INTO audio_asr (ref, data) VALUES (201, '{\"text\": \"cat\"}')")
         cur.execute("INSERT INTO audio_asr (ref, data) VALUES (202, '{\"text\": \"bird\"}')")
 
@@ -208,7 +212,6 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
             "--homonyms", self.homonyms_path,
             "--language", "en",
             "--project", "quick",
-            "--max_words", "1",
             "--professional_raters", self.professional_raters_path,
             "--student_raters", self.student_raters_path,
             "--rater_type", "all",

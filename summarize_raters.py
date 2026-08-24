@@ -25,7 +25,7 @@ producing separate points:
 
 * Plot 1: mean audiologist ``audio_annotations`` true fraction versus mean
     rerater ``review_annotations`` true fraction.
-* Plot 2: mean ASR matched-word count divided by ``--max_words`` versus mean
+* Plot 2: mean ASR matched-word count divided by the answer word count versus mean
     audiologist true fraction.
 * Plot 3: the same normalized ASR value versus mean rerater true fraction.
 
@@ -74,11 +74,6 @@ flags.DEFINE_list(
 flags.DEFINE_string("output_csv", "rater_summary.csv", "CSV file for the summary.")
 flags.DEFINE_string("plot", "rater_summary.png", "PNG file for the optional plot.")
 flags.DEFINE_bool("no_plot", False, "Do not create the summary plot.")
-flags.DEFINE_integer(
-    "max_words",
-    5,
-    "Maximum number of words used to normalize ASR matches.",
-)
 flags.DEFINE_bool(
     "per_trial",
     False,
@@ -287,6 +282,12 @@ def score_trial(answer: str, asr_words: Iterable[str], homonyms: Dict[str, Set[s
         if candidates.intersection(asr_word_set):
             matched_items.add(item)
     return len(matched_items)
+
+
+def normalize_asr_score(answer: str, matched_words: int) -> float:
+    """Normalize matched ASR words by the number of words in the answer."""
+    answer_word_count = len(re.findall(r"\b[a-zA-Z/0-9']+\b", (answer or "").lower()))
+    return matched_words / answer_word_count if answer_word_count else 0.0
 
 
 def fraction_true(data: str) -> float:
@@ -522,7 +523,7 @@ def build_raw_dataframe(rows: Iterable[sqlite3.Row],
                 "project": row["project"],
                 "snr": row["snr"],
                 "subject": row["username"],
-                "asr_fraction_correct": matched / FLAGS.max_words,
+                "asr_fraction_correct": normalize_asr_score(row["answer"], matched),
                 "audiologist_fraction_correct": fraction_true(row["audio_annotation_data"]),
                 "rater_username": row["labeler_username"],
                 "rater_fraction_correct": fraction_true(row["review_annotation_data"]),
@@ -584,19 +585,23 @@ def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], per_tr
                     "mean_fraction_audio_annotation_true": audio_fraction,
                     "mean_fraction_review_annotation_true": review_fraction,
                     "average_matched_word_count": matched_words,
-                    "normalized_matched_word_count": matched_words / FLAGS.max_words,
+                    "normalized_matched_word_count": normalize_asr_score(row["answer"], matched_words),
                 }
             )
         return summary
     
     # Original aggregation by (user, project, snr)
-    groups: Dict[Tuple[Any, str, Any], List[Tuple[float, float, int]]] = defaultdict(list)
+    groups: Dict[Tuple[Any, str, Any], List[Tuple[float, float, int, float]]] = defaultdict(list)
     for row in rows:
+        matched_words = score_trial(
+            row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms
+        )
         groups[(row["user"], row["project"], row["snr"])].append(
             (
                 fraction_true(row["audio_annotation_data"]),
                 fraction_true(row["review_annotation_data"]),
-                score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms),
+                matched_words,
+                normalize_asr_score(row["answer"], matched_words),
             )
         )
 
@@ -615,7 +620,7 @@ def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], per_tr
                 "mean_fraction_audio_annotation_true": audio_fraction,
                 "mean_fraction_review_annotation_true": review_fraction,
                 "average_matched_word_count": matched_words,
-                "normalized_matched_word_count": matched_words / FLAGS.max_words,
+                "normalized_matched_word_count": sum(value[3] for value in values) / count,
             }
         )
     return summary
@@ -684,7 +689,7 @@ def print_outlier_details(
     for row in rows:
         asr_words = extract_asr_words(row["audio_asr_data"])
         matched = score_trial(row["answer"], asr_words, homonyms)
-        normalized_asr = matched / FLAGS.max_words
+        normalized_asr = normalize_asr_score(row["answer"], matched)
         audio_fraction = fraction_true(row["audio_annotation_data"])
         if normalized_asr <= asr_max and audio_fraction >= audio_min:
             found += 1
@@ -699,7 +704,7 @@ def print_outlier_details(
                 f"  Project/SNR:  {row['project']} / {row['snr']}\n"
                 f"  Ground truth: {row['answer']}\n"
                 f"  ASR output:   {asr_text}\n"
-                f"  ASR matched:  {matched}/{FLAGS.max_words} (normalized={normalized_asr:.2f})\n"
+                f"  ASR matched:  {matched} (normalized={normalized_asr:.2f})\n"
                 f"  Audiologist:  {row['audio_annotation_data']} (fraction={audio_fraction:.2f})\n"
                 f"  Rerater:      {row['review_annotation_data']}\n"
             )
@@ -885,7 +890,7 @@ def create_residual_plot(
         utterance_key = (row["project"], row["snr"], row["utterance_id"])
         if utterance_key not in asr_scores:
             matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
-            asr_scores[utterance_key] = matched / FLAGS.max_words
+            asr_scores[utterance_key] = normalize_asr_score(row["answer"], matched)
         if row["labeler_username"] in valid_raters:
             utterance_rater_scores[utterance_key].append(
                 fraction_true(row["review_annotation_data"])
@@ -1051,7 +1056,7 @@ def create_subject_rater_plot(
     for row in rows:
         subject = row["user"]
         matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
-        asr_scores[subject].append(matched / FLAGS.max_words)
+        asr_scores[subject].append(normalize_asr_score(row["answer"], matched))
         rater_scores[(subject, row["labeler_username"])].append(
             fraction_true(row["review_annotation_data"])
         )
