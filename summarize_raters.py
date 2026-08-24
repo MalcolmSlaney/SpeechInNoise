@@ -52,7 +52,10 @@ try:
     flags.DEFINE_string("dbfile", "experiments.db", "Path to the SQLite database.")
 except flags.DuplicateFlagError:
     pass
-flags.DEFINE_string("homonyms", "homonym_list.csv", "Path to the homonym CSV file.")
+try:
+    flags.DEFINE_string("homonyms", "homonym_list.csv", "Path to the homonym CSV file.")
+except flags.DuplicateFlagError:
+    pass
 flags.DEFINE_string("language", "en", "Trial language to include.")
 flags.DEFINE_string("project", "quick", "Project to include.")
 flags.DEFINE_string(
