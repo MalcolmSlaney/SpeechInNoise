@@ -109,9 +109,9 @@ class OfflineASRTest(absltest.TestCase):
         # 1. Mock ffmpeg so the test doesn't crash if ffmpeg isn't installed
         def mock_subprocess_side_effect(*args, **kwargs):
             # Extract the output filename (the last argument in the ffmpeg command)
-            # The command string is passed in args[0]
+            # The command is passed as an argument list in args[0]
             cmd = args[0]
-            output_file = cmd.split()[-1] 
+            output_file = cmd[-1]
             
             # Create a dummy file so os.remove doesn't fail
             with open(output_file, 'w') as f:
