@@ -159,7 +159,6 @@ for line in "${job_lines[@]}"; do
       --residual_plot "$tag_dir/residual_std_ratio_${project}.png"
       --residual_normalization normalization_by_snr
       --output_csv "$tag_dir/summarize_raters_${project}.csv"
-      --add_pseudo_snr
       --residual_debug_points=10
     )
     if [[ "$dump_raw_data" == true ]]; then
