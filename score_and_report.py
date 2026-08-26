@@ -373,6 +373,11 @@ def main(argv: List[str]) -> None:
     # 1. Load the homonyms dictionary
     homonyms_map = load_homonyms(FLAGS.homonyms)
 
+    # Fix up WIN project SNR values before querying, so this run's CSV/reports
+    # reflect the correction.
+    win_updated_count = add_win_snr(FLAGS.dbfile, project='win')
+    logging.info(f"Updated {win_updated_count} WIN project rows with correct SNR values.")
+
     # 2. Connect to the database
     conn = sqlite3.connect(FLAGS.dbfile)
     cursor = conn.cursor()
@@ -492,10 +497,6 @@ def main(argv: List[str]) -> None:
     # 7. Generate All Reports
     print("\n--- Generating Reports ---")
     valid_subject_re = re.compile(FLAGS.subject_filter)
-    
-    # Add the proper SNR values for the WIN project if needed
-    win_updated_count = add_win_snr(FLAGS.dbfile, project='win')
-    logging.info(f"Updated {win_updated_count} WIN project rows with correct SNR values.")
 
     # CSV
     save_results_as_csv(all_results, FLAGS.csv_output)
