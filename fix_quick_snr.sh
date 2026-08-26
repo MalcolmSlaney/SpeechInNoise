@@ -8,23 +8,21 @@ set -euo pipefail
 # `summarize_raters.py --add_pseudo_snr` to both the 'quick' and 'win'
 # projects. That flag's cleanup step (clear_pseudo_snr) unconditionally reset
 # audio_trials.snr to NULL for whichever project it was passed, which wiped
-# out 'quick' project's real SNR values. This script repairs each affected
-# database by copying snr from a known-good source database, matched on the
-# (project, lang, level_number, trial_number) natural key (see the unique
-# index in schema.sql).
+# out 'quick' project's real SNR values.
+#
+# This script repairs each affected database by re-running QuickDB's CSV
+# import (projects.QuickDB, via migrate.py), which upserts every audio_trials
+# column, including snr, from metadata/quicksin_transcript.csv keyed on the
+# same (lang, trial_number, level_number) natural key used originally. This
+# is the same code path the app uses to populate the table in the first
+# place, so it repairs the data more reliably than copying between two
+# separately-typed SQLite files.
 #
 # Usage:
-#   ./fix_quick_snr.sh [source_db]
-# source_db defaults to experiments.db next to this script.
+#   ./fix_quick_snr.sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUN_DIR="$SCRIPT_DIR/run_exp3"
-SOURCE_DB="${1:-$SCRIPT_DIR/experiments.db}"
-
-if [[ ! -f "$SOURCE_DB" ]]; then
-  echo "Missing source database: $SOURCE_DB" >&2
-  exit 1
-fi
 
 shopt -s nullglob
 tag_dbs=("$RUN_DIR"/*/experiments.db)
@@ -50,20 +48,7 @@ for tag_db in "${tag_dbs[@]}"; do
     echo "[$tag] Backed up to $backup"
   fi
 
-  sqlite3 "$tag_db" <<SQL
-ATTACH DATABASE '$SOURCE_DB' AS good;
-UPDATE audio_trials
-SET snr = (
-  SELECT good.audio_trials.snr
-  FROM good.audio_trials
-  WHERE good.audio_trials.project = audio_trials.project
-    AND good.audio_trials.lang = audio_trials.lang
-    AND good.audio_trials.level_number = audio_trials.level_number
-    AND good.audio_trials.trial_number = audio_trials.trial_number
-)
-WHERE project = 'quick';
-DETACH DATABASE good;
-SQL
+  python "$SCRIPT_DIR/migrate.py" projects.QuickDB --database "$tag_db"
 
   after="$(sqlite3 "$tag_db" \
     "SELECT COUNT(*) FROM audio_trials WHERE project='quick' AND snr IS NULL;")"
