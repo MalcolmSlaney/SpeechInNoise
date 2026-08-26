@@ -190,13 +190,16 @@ def concatenate_audio_files(input_file1: str, input_file2: str) -> str:
   fd, temp_output_filename = tempfile.mkstemp(suffix='.wav')
   os.close(fd)
 
+  filter_complex = (
+      '[0:a]aresample=22050[a0];[1:a]aresample=22050[a1];'
+      '[a0][a1]concat=n=2:v=0:a=1[out]'
+  )
+  cmd = [
+      'ffmpeg', '-nostdin', '-i', input_file1, '-i', input_file2,
+      '-filter_complex', filter_complex, '-map', '[out]', temp_output_filename,
+  ]
 
-  cmd = ('ffmpeg -i {} -i {} -filter_complex --nostdin `'
-         '"[0:a]aresample={}[a0];[1:a]aresample={}[a1];'
-         '[a0][a1]concat=n=2:v=0:a=1[out]" -map "[out]" {}')
-  formatted_cmd = cmd.format(input_file1, input_file2, 22050, 22050, temp_output_filename)
-
-  process = subprocess.run(formatted_cmd, shell=True, capture_output=True, text=True)
+  process = subprocess.run(cmd, capture_output=True, text=True)
 
   if process.returncode != 0:
     print("Error during ffmpeg execution:")
