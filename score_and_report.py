@@ -134,6 +134,68 @@ def fix_encoding(bad_string: str) -> str:
     return html_encoded
 
 
+# Maps each WIN project answer word (lowercased) to its correct SNR.
+WIN_WORD_SNR: Dict[str, int] = {
+    'cool': 24, 'food': 24, 'hire': 24, 'pain': 24, 'road': 24,
+    'wheat': 24, 'dodge': 24, 'juice': 24, 'late': 24, 'youth': 24,
+    'ditch': 20, 'gun': 20, 'haze': 20, 'kick': 20, 'luck': 20,
+    'tire': 20, 'chair': 20, 'ring': 20, 'such': 20, 'shawl': 20,
+    'base': 16, 'date': 16, 'dog': 16, 'judge': 16, 'live': 16,
+    'wire': 16, 'gas': 16, 'red': 16, 'time': 16, 'have': 16,
+    'chief': 12, 'good': 12, 'hate': 12, 'pass': 12, 'rush': 12,
+    'witch': 12, 'search': 12, 'shack': 12, 'tool': 12, 'voice': 12,
+    'bite': 8, 'deep': 8, 'half': 8, 'make': 8, 'pick': 8,
+    'sour': 8, 'turn': 8, 'doll': 8, 'young': 8, 'soap': 8,
+    'beg': 4, 'far': 4, 'long': 4, 'mood': 4, 'mouse': 4,
+    'note': 4, 'talk': 4, 'learn': 4, 'mess': 4, 'sheep': 4,
+    'back': 0, 'bath': 0, 'gaze': 0, 'nice': 0, 'read': 0,
+    'calm': 0, 'dab': 0, 'kill': 0, 'life': 0, 'get': 0,
+}
+
+
+def add_win_snr(dbfile: str, project: str = 'win') -> int:
+    """Assigns and persists the correct trials_snr for WIN project rows, 
+    which seem to be missing when we ingested the WIN data.
+
+    Looks up each row's trials_answer (case-insensitive) in WIN_WORD_SNR and
+    writes the matching SNR back to audio_trials.snr.
+
+    Args:
+        dbfile: Path to the SQLite database file to update in place.
+        project: Value of audio_trials.project to update.
+
+    Returns:
+        The number of rows updated.
+    """
+    updated = 0
+    unmatched: List[Tuple[int, str]] = []
+    conn = sqlite3.connect(dbfile)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            'SELECT id, answer FROM audio_trials WHERE project = ?', (project,)
+        )
+        rows = cursor.fetchall()
+        for trial_id, answer in rows:
+            word = (answer or '').strip().lower()
+            snr = WIN_WORD_SNR.get(word)
+            if snr is None:
+                unmatched.append((trial_id, answer))
+                continue
+            cursor.execute(
+                'UPDATE audio_trials SET snr = ? WHERE id = ?', (snr, trial_id)
+            )
+            updated += 1
+        conn.commit()
+    finally:
+        conn.close()
+    if unmatched:
+        logging.warning(
+            f"WIN SNR: {len(unmatched)} '{project}' row(s) did not match the SNR table: {unmatched}"
+        )
+    return updated
+
+
 def save_results_as_csv(all_results: List[QS_result], csv_file: str = 'quicksin_results.csv') -> str:
     """Exports the processed results to a CSV file."""
     header = [
@@ -431,6 +493,10 @@ def main(argv: List[str]) -> None:
     print("\n--- Generating Reports ---")
     valid_subject_re = re.compile(FLAGS.subject_filter)
     
+    # Add the proper SNR values for the WIN project if needed
+    win_updated_count = add_win_snr(FLAGS.dbfile, project='win')
+    logging.info(f"Updated {win_updated_count} WIN project rows with correct SNR values.")
+
     # CSV
     save_results_as_csv(all_results, FLAGS.csv_output)
 
