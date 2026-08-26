@@ -290,7 +290,7 @@ def remove_prime_from_results(asr_result: Dict[str, Any],
     if new_segment is not None:
       new_segments.append(new_segment)
   filtered['segments'] = new_segments
-  filtered['text'] = assemble_words(filtered)
+  filtered['text'] = ' '.join(assemble_words(filtered))
   filtered['note'] = 'Used acoustic prime'
   return filtered
 
