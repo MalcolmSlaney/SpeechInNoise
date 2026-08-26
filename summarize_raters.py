@@ -143,20 +143,6 @@ flags.DEFINE_string(
     "Path to write the raw per-utterance pandas DataFrame (pickle format) when "
     "--dump_raw_data is set.",
 )
-flags.DEFINE_bool(
-    "add_pseudo_snr",
-    False,
-    "Compute pseudo SNR values for the 'win' project (which has no real SNR) "
-    "from --pseudo_snr_breakpoints and write them to audio_trials.snr in "
-    "--dbfile, then exit without running the usual summary.",
-)
-flags.DEFINE_list(
-    "pseudo_snr_breakpoints",
-    ["a", "Dab", "Gaze", "Juice", "Mess", "Ring", "Talk", "Youth", "ZZZZZ"],
-    "Sorted breakpoint word list used by --add_pseudo_snr. A 'win' utterance's "
-    "answer is assigned pseudo SNR i if it sorts after breakpoint[i-1] and at "
-    "or before breakpoint[i] (case-insensitive).",
-)
 
 
 def read_professional_raters(filename: str) -> Set[str]:
@@ -335,87 +321,6 @@ def is_valid_subject(username: str, subject_pattern: str, excluded_subjects: Ite
         and re.fullmatch(subject_pattern, username) is not None
         and username not in set(excluded_subjects)
     )
-
-
-def pseudo_snr_bucket(answer: str, breakpoints: List[str]) -> Optional[int]:
-    """Return the pseudo SNR bucket index for an answer word under a breakpoint list.
-
-    Buckets are defined by consecutive breakpoint pairs: bucket ``i`` (for
-    ``1 <= i < len(breakpoints)``) contains words that sort strictly after
-    ``breakpoints[i - 1]`` and at or before ``breakpoints[i]``, comparing
-    case-insensitively.
-
-    Args:
-        answer: The ``audio_trials.answer`` value to classify.
-        breakpoints: Sorted list of boundary words; must have at least 2 entries.
-
-    Returns:
-        The bucket index, or ``None`` if ``answer`` does not fall strictly
-        after ``breakpoints[0]`` or falls after ``breakpoints[-1]``.
-    """
-    word = (answer or "").strip().lower()
-    lowered = [bp.lower() for bp in breakpoints]
-    for i in range(1, len(lowered)):
-        if lowered[i - 1] < word <= lowered[i]:
-            return i
-    return None
-
-
-def add_pseudo_snr(dbfile: str, breakpoints: List[str], project: str = "win") -> int:
-    """Assign and persist pseudo SNR values for a project lacking real SNR data.
-
-    Reads every ``audio_trials`` row for ``project``, buckets its ``answer``
-    word against ``breakpoints`` via :func:`pseudo_snr_bucket`, and writes the
-    resulting bucket index back to that row's ``snr`` column.
-
-    Args:
-        dbfile: Path to the SQLite database file to update in place.
-        breakpoints: Sorted breakpoint word list; see :func:`pseudo_snr_bucket`.
-        project: Value of ``audio_trials.project`` to update.
-
-    Returns:
-        The number of rows updated.
-    """
-    updated = 0
-    unmatched: List[Tuple[int, str]] = []
-    with sqlite3.connect(dbfile) as connection:
-        connection.row_factory = sqlite3.Row
-        rows = connection.execute(
-            "SELECT id, answer FROM audio_trials WHERE project = ?", (project,)
-        ).fetchall()
-        for row in rows:
-            bucket = pseudo_snr_bucket(row["answer"], breakpoints)
-            if bucket is None:
-                unmatched.append((row["id"], row["answer"]))
-                continue
-            connection.execute(
-                "UPDATE audio_trials SET snr = ? WHERE id = ?", (bucket, row["id"])
-            )
-            updated += 1
-        connection.commit()
-    if unmatched:
-        logging.warning(
-            f"pseudo SNR: {len(unmatched)} '{project}' row(s) did not match any breakpoint bucket: {unmatched}"
-        )
-    return updated
-
-
-def clear_pseudo_snr(dbfile: str, project: str = "win") -> int:
-    """Reverse :func:`add_pseudo_snr` by restoring ``snr`` to its default (empty).
-
-    Args:
-        dbfile: Path to the SQLite database file to update in place.
-        project: Value of ``audio_trials.project`` to restore.
-
-    Returns:
-        The number of rows updated.
-    """
-    with sqlite3.connect(dbfile) as connection:
-        cursor = connection.execute(
-            "UPDATE audio_trials SET snr = NULL WHERE project = ?", (project,)
-        )
-        connection.commit()
-        return cursor.rowcount
 
 
 def fetch_trials(
@@ -1158,15 +1063,7 @@ def main(argv: List[str]) -> None:
     Args:
         argv: Unused command-line arguments (consumed by ABSL).
     """
-    if FLAGS.add_pseudo_snr:
-        updated = add_pseudo_snr(FLAGS.dbfile, FLAGS.pseudo_snr_breakpoints, project=FLAGS.project)
-        print(f"Wrote pseudo SNR for {updated} '{FLAGS.project}' row(s) in {FLAGS.dbfile}")
-    try:
-        _run_summary(argv)
-    finally:
-        if FLAGS.add_pseudo_snr:
-            restored = clear_pseudo_snr(FLAGS.dbfile, project=FLAGS.project)
-            print(f"Restored SNR to empty for {restored} '{FLAGS.project}' row(s) in {FLAGS.dbfile}")
+    _run_summary(argv)
 
 
 def _run_summary(argv: List[str]) -> None:
