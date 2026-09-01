@@ -142,7 +142,7 @@ for line in "${job_lines[@]}"; do
   echo "[$tag] Running: ${score_cmd[*]}"
   "${score_cmd[@]}" < /dev/null
 
-  dump_raw_data=false
+  dump_raw_data=true # Always dump raw data for now, since we want to check the residuals for every tag.
   for dump_tag in "${DUMP_RAW_DATA_TAGS[@]}"; do
     if [[ "$tag" == "$dump_tag" ]]; then
       dump_raw_data=true

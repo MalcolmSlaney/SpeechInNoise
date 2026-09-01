@@ -195,7 +195,7 @@ def concatenate_audio_files(input_file1: str, input_file2: str) -> str:
       '[a0][a1]concat=n=2:v=0:a=1[out]'
   )
   cmd = [
-      'ffmpeg', '-nostdin', '-i', input_file1, '-i', input_file2,
+      'ffmpeg', '-y', '-nostdin', '-i', input_file1, '-i', input_file2,
       '-filter_complex', filter_complex, '-map', '[out]', temp_output_filename,
   ]
 
