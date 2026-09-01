@@ -190,7 +190,7 @@ class ForcedWhisperASR(WhisperASR): # Assuming WhisperASR is your base class
                 # Always restore the original function so we don't permanently break it
                 DecodingTask.__init__ = original_init
                 
-            return result
+            return {**result, **self.meta}
             
         # Fallback if no valid_words were passed
-        return self.model.transcribe(audio_path, **options)
+        return {**self.model.transcribe(audio_path, **options), **self.meta}
