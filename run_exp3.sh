@@ -150,6 +150,21 @@ for line in "${job_lines[@]}"; do
     fi
   done
 
+  # audio_asr.data's model_name is whatever --model was passed to
+  # offline_asr.py (e.g. "large"), not the tag itself (e.g.
+  # "large_exact_100"), so extract it from this job's args for --asr_model.
+  asr_model_name="$tag"
+  for ((arg_index = 0; arg_index < ${#args[@]}; arg_index++)); do
+    arg="${args[$arg_index]}"
+    if [[ "$arg" == --model=* ]]; then
+      asr_model_name="${arg#--model=}"
+      break
+    elif [[ "$arg" == "--model" ]]; then
+      asr_model_name="${args[$((arg_index + 1))]}"
+      break
+    fi
+  done
+
   for project in quick win; do
     summary_log="$tag_dir/summarize_raters_${project}.log"
     summary_cmd=(
@@ -164,7 +179,7 @@ for line in "${job_lines[@]}"; do
     if [[ "$dump_raw_data" == true ]]; then
       summary_cmd+=(
         --dump_raw_data
-        --asr_model="$tag"
+        --asr_model="$asr_model_name"
         --raw_output="$tag_dir/residual_raw_data_${project}.pkl"
       )
     fi
