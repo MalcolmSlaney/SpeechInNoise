@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="vars.css" />
+    <link rel="stylesheet" href="done.css" />
+    <script type="text/javascript" src="done.js"></script>
+  </head>
+  <body>
+    <div id="content">
+      That's all we need, thanks for your help
+      <form action="javascript:;" id="effort-case"
+          onsubmit="submit_effort()">
+        Subject Listening Effort (1-10):
+        <input type="number" id="effort" min="1" max="10" autofocus required />
+        <input type="submit" value="submit" />
+        <span id="effort-status"></span>
+      </form>
+      <a href="index.html">Start next patient</a>
+      <a id="results" class="hidden">Results</a>
+      <a id="recognized" class="hidden debug" href="#">
+        Recognized speech
+      </a>
+      <a id="reset" class="hidden debug" onclick="reset(event)" href="#">
+        Try next list
+      </a>
+      <img class="org-icon" />
+    </div>
+  </body>
+</html>
+

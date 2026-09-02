@@ -95,7 +95,12 @@ def get_current_file_data(db, user_id, username=None):
     
     if not remaining_tests:
         return None, None, None, None, None, None
-    
+
+    if _reviewer_in_clinic(db, username):
+        priority = [t for t in remaining_tests if t["project"] in ("quick", "win")]
+        if priority:
+            remaining_tests = priority
+
     most_recent = reviewer_state['most_recent_subject']
     if most_recent:
         filtered_tests = [t for t in remaining_tests if t["subject"] != most_recent]

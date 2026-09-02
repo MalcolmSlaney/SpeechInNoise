@@ -188,8 +188,7 @@ def calculate_and_update_remaining_tests(db, username, user_id):
     try:
         from review_modules import queries
         rev_state = get_reviewer_state(db, username)
-        in_clinic = rev_state['reviewer_test_type'] == 'in_clinic_audiologist'
-        available_tests = queries.get_available_tests(db, user_id, in_clinic=in_clinic)
+        available_tests = queries.get_available_tests(db, user_id)
         completed_tests = rev_state['completed_tests']
         completed_set = {(t["subject"], t["project"]) for t in completed_tests}
         

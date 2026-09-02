@@ -8,7 +8,7 @@ import json
 import os
 import sqlite3
 
-DB_PATH = "experiments_malcolm.db"
+DB_PATH = "experiments.db"
 
 TABLES_TO_CHECK = [
     "users",

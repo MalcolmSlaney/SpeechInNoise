@@ -82,7 +82,7 @@ def add_asr_columns_if_needed(db_file):
       con.commit()
 
 try:
-  flags.DEFINE_string('dbfile', 'experiments_malcolm.db', 
+  flags.DEFINE_string('dbfile', 'experiments.db', 
                       'Path to the SQLite database file to migrate.')
 except flags.DuplicateFlagError:
     pass # Flag was already defined by another module during pytest collection

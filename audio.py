@@ -117,14 +117,18 @@ class AudioBP(DatabaseBP):
                 "WHERE project=? AND level_number=1", (self.project_key,))]
         return json.dumps(langs + lists)
 
+    def audio_step(self, cur, step):
+        return cur['trial_number'], step
+
     def audio_next(self, db, cur, done=None):
         level = json.loads(session["level"])
         session["level"] = json.dumps(level + 1)
+        trial_number, level_number = self.audio_step(cur, level + 1)
         q = db.queryone(
                 f"SELECT {','.join(self.audio_keys)} "
                 f"FROM {self.trials_table} WHERE project=? AND "
                 "level_number=? AND trial_number=? AND lang=?",
-                (self.project_key, level + 1, cur['trial_number'], cur['lang']))
+                (self.project_key, level_number, trial_number, cur['lang']))
         if q is None:
             q = self.audio_done
             self.audio_async(*done(True))
@@ -191,7 +195,7 @@ class AudioBP(DatabaseBP):
         if file.filename == "":
             abort(400)
         cur = json.loads(session["cur"])
-        fname = f"sin_{session['user']}_{cur['id']}_{uuid.uuid4()}"
+        fname = f"sin_{session['user']}_{cur['id']}_{uuid.uuid4()}.wav"
         fpath = os.path.join(upload_location, fname)
         file.save(fpath)
         rowid = db.execute(

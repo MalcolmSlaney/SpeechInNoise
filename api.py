@@ -11,11 +11,14 @@ from projects import (
     WinDB, WinBP,
     AzBioSpanishDB, AzBioSpanishBP,
     AzBioSpanishQuietDB, AzBioSpanishQuietBP,
+    AzBioSpanishRemixedDB, AzBioSpanishRemixedBP,
+    AzBioMandarinDB, AzBioMandarinBP,
+    AzBioMandarinQuietDB, AzBioMandarinQuietBP,
 )
 from review import ReviewBP
 
 # use multiple inheritance to add other DB hooks
-class ExperimentDB(QuickDB, Qs3DB, Nu6DB, AzBioDB, AzBioQuietDB, CncDB, WinDB, AzBioSpanishDB, AzBioSpanishQuietDB):
+class ExperimentDB(QuickDB, Qs3DB, Nu6DB, AzBioDB, AzBioQuietDB, CncDB, WinDB, AzBioSpanishDB, AzBioSpanishQuietDB, AzBioSpanishRemixedDB, AzBioMandarinDB, AzBioMandarinQuietDB):
     def _username_hook(self):
         res = set_username(self)
         super()._username_hook()
@@ -44,6 +47,9 @@ class APIBlueprint(DatabaseBP):
             "review": ReviewBP,
             "azbio_spanish": AzBioSpanishBP,
             "azbio_spanish_quiet": AzBioSpanishQuietBP,
+            "azbio_spanish_remixed": AzBioSpanishRemixedBP,
+            "azbio_mandarin": AzBioMandarinBP,
+            "azbio_mandarin_quiet": AzBioMandarinQuietBP,
         }
         assert self.default_project in self.projects and "" not in self.projects
         for bp in self.projects.keys():
@@ -155,8 +161,8 @@ def set_username(db):
         # appropriate language depending on project
         # will need to adjust for mandarin!
         default_lang = (
-            "sp" if effective_project in (
-                "azbio_spanish", "azbio_spanish_quiet") else "en")
+            "es" if effective_project in ("azbio_spanish", "azbio_spanish_quiet", "azbio_spanish_remixed") else
+            "zh" if effective_project in ("azbio_mandarin", "azbio_mandarin_quiet") else "en")
         session["requested"] = json.dumps([default_lang, None])
     return json.dumps(APIBlueprint.default_project)
 

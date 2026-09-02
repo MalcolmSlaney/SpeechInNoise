@@ -1,6 +1,7 @@
 from audio import AudioDB, AudioOutputBP
 from storage import relpath
-import pathlib, warnings
+from flask import session, abort
+import json, pathlib, random, warnings
 
 class AudioSpec:
     trials_table = "audio_trials"
@@ -164,4 +165,93 @@ class AzBioSpanishQuietDB(AzBioSpanishQuietSpec, AudioDB):
 
 class AzBioSpanishQuietBP(AzBioSpanishQuietSpec, AudioOutputBP):
     def __init__(self, db, name="azbio_spanish_quiet", url_prefix="/azbio_spanish_quiet"):
+        super().__init__(db, name, url_prefix)
+
+# AzBio Spanish, six consecutive lists interleaved sentence by sentence:
+# list 1 sentence 1, list 2 sentence 1, ... list 6 sentence 1, list 1 sentence 2
+# The 30 lists form 5 fixed collections (1-6, 7-12, 13-18, 19-24, 25-30).
+# patients will do a whole collection starting from the first list.
+# This is because different lists have different snr levels, and the first is the easiest (25 dBsnr)
+class AzBioSpanishRemixedSpec(AudioSpec):
+    audio_files = relpath("metadata/azbio_spanish_transcript.csv")
+    project_key = "azbio_spanish_remixed"
+    lists_per_collection = 6
+
+class AzBioSpanishRemixedDB(AzBioSpanishRemixedSpec, AudioDB):
+    def db_init_hook(self):
+        super().db_init_hook()
+        self.parse_csv(__class__)
+
+class AzBioSpanishRemixedBP(AzBioSpanishRemixedSpec, AudioOutputBP):
+    def __init__(self, db, name="azbio_spanish_remixed", url_prefix="/azbio_spanish_remixed"):
+        super().__init__(db, name, url_prefix)
+
+    def collection_base(self, trial_number):
+        n = self.lists_per_collection
+        return (int(trial_number) - 1) // n * n + 1
+
+    def audio_step(self, cur, step):
+        n = self.lists_per_collection
+        base = self.collection_base(cur['trial_number'])
+        return base + (step - 1) % n, (step - 1) // n + 1
+
+    def audio_lists(self, db):
+        return json.dumps([i[0] for i in db.queryall(
+                f"SELECT lang || '-' || trial_number FROM {self.trials_table} "
+                "WHERE project=? AND level_number=1 AND "
+                "(trial_number - 1) % ? = 0 ORDER BY trial_number",
+                (self.project_key, self.lists_per_collection))])
+
+    def audio_start(self, db):
+        if "user" in session and "cur" not in session:
+            lang, trial_number = json.loads(session["requested"])
+            if trial_number is None:
+                bases = [i[0] for i in db.queryall(
+                        f"SELECT trial_number FROM {self.trials_table} "
+                        "WHERE project=? AND lang=? AND active=1 AND "
+                        "level_number=1 AND (trial_number - 1) % ? = 0 AND "
+                        "trial_number NOT IN ("
+                            f"SELECT trial_number FROM {self.results_table} "
+                            f"LEFT JOIN {self.trials_table} "
+                            f"ON {self.results_table}.trial="
+                                f"{self.trials_table}.id "
+                            "WHERE subject=? AND level_number=1)",
+                        (self.project_key, lang, self.lists_per_collection,
+                         session["user"]))]
+                if not bases:
+                    abort(400)
+                trial_number = random.choice(bases)
+            session["requested"] = json.dumps(
+                    [lang, self.collection_base(trial_number)])
+        return super().audio_start(db)
+
+###### Mandarin
+# AzBio Mandarin with 10dB SNR
+
+class AzBioMandarinSpec(AudioSpec):
+    audio_files = relpath("metadata/azbio_mandarin_transcript.csv")
+    project_key = "azbio_mandarin"
+
+class AzBioMandarinDB(AzBioMandarinSpec, AudioDB):
+    def db_init_hook(self):
+        super().db_init_hook()
+        self.parse_csv(__class__)
+
+class AzBioMandarinBP(AzBioMandarinSpec, AudioOutputBP):
+    def __init__(self, db, name="azbio_mandarin", url_prefix="/azbio_mandarin"):
+        super().__init__(db, name, url_prefix)
+
+# AzBio Mandarin in Quiet
+
+class AzBioMandarinQuietSpec(AudioSpec):
+    audio_files = relpath("metadata/azbio_mandarin_quiet_transcript.csv")
+    project_key = "azbio_mandarin_quiet"
+
+class AzBioMandarinQuietDB(AzBioMandarinQuietSpec, AudioDB):
+    def db_init_hook(self):
+        super().db_init_hook()
+        self.parse_csv(__class__)
+
+class AzBioMandarinQuietBP(AzBioMandarinQuietSpec, AudioOutputBP):
+    def __init__(self, db, name="azbio_mandarin_quiet", url_prefix="/azbio_mandarin_quiet"):
         super().__init__(db, name, url_prefix)
