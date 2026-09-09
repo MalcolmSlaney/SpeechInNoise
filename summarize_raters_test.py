@@ -24,6 +24,39 @@ class NormalizeAsrScoreTest(absltest.TestCase):
 
 class SummarizeRatersResidualModeTest(absltest.TestCase):
 
+    def test_build_raw_dataframe_includes_username(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT DISTINCT
+                ar.subject AS user,
+                u.username AS username,
+                at.project,
+                at.snr,
+                at.answer,
+                ar.id AS utterance_id,
+                aa.data AS audio_annotation_data,
+                ra.data AS review_annotation_data,
+                asr.data AS audio_asr_data,
+                labeler_user.username AS labeler_username
+            FROM audio_results ar
+            JOIN audio_trials at ON ar.trial = at.id
+            JOIN users u ON ar.subject = u.id
+            LEFT JOIN audio_annotations aa ON ar.id = aa.ref
+            JOIN review_annotations ra ON ar.id = ra.ref
+            JOIN users labeler_user ON ra.labeler = labeler_user.id
+            LEFT JOIN audio_asr asr ON ar.id = asr.ref
+            WHERE at.lang = ? AND at.project = ?
+            """,
+            ("en", "quick"),
+        ).fetchall()
+        conn.close()
+
+        dataframe = sr.build_raw_dataframe(rows, {}, "whisper")
+        self.assertIn("username", dataframe.columns)
+        self.assertEqual(list(dataframe["username"]), ["A1S1", "A1S1"])
+
     def setUp(self):
         super().setUp()
         self.temp_dir = self.create_tempdir().full_path
@@ -164,8 +197,8 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
         cur.execute("INSERT INTO audio_results (id, subject, trial) VALUES (202, 1, 12)")
 
         # ASR: utterance 1 matches, utterance 2 does not.
-        cur.execute("INSERT INTO audio_asr (ref, data) VALUES (201, '{\"text\": \"cat\"}')")
-        cur.execute("INSERT INTO audio_asr (ref, data) VALUES (202, '{\"text\": \"bird\"}')")
+        cur.execute("INSERT INTO audio_asr (ref, data) VALUES (201, '{\"text\": \"cat\", \"model_name\": \"whisper\"}')")
+        cur.execute("INSERT INTO audio_asr (ref, data) VALUES (202, '{\"text\": \"bird\", \"model_name\": \"whisper\"}')")
 
         # Optional audiologist rows; not needed for residual computation but harmless.
         cur.execute("INSERT INTO audio_annotations (ref, data) VALUES (201, '[true]')")

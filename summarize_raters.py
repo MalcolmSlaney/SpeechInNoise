@@ -427,6 +427,7 @@ def build_raw_dataframe(rows: Iterable[sqlite3.Row],
                 "utterance_id": row["utterance_id"],
                 "project": row["project"],
                 "snr": row["snr"],
+                "username": row["username"],
                 "subject": row["username"],
                 "asr_fraction_correct": normalize_asr_score(row["answer"], matched),
                 "audiologist_fraction_correct": fraction_true(row["audio_annotation_data"]),
@@ -439,8 +440,8 @@ def build_raw_dataframe(rows: Iterable[sqlite3.Row],
     if long_df.empty:
         return long_df
 
-    base_columns = ["utterance_id", "project", "snr", "subject", "asr_fraction_correct",
-                     "audiologist_fraction_correct"]
+    base_columns = ["utterance_id", "project", "snr", "username", "subject",
+                    "asr_fraction_correct", "audiologist_fraction_correct"]
     base = long_df[base_columns].drop_duplicates(subset="utterance_id").set_index("utterance_id")
 
     rater_pivot = long_df.pivot_table(
