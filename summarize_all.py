@@ -21,10 +21,10 @@ python3 summarize_all.py \
   --professional_raters=metadata/professional_raters.txt \
   --ground_truth_column=SRT_Audiologist_and_Raters_Median
 
-Or, to load a single model variation's pickles from a run_exp3.sh output
-directory (--summary_directory is joined onto each local path in
---input_pickles):
-python3 summarize_all.py --summary_directory=run_exp3/medium
+Or, to load every known model variation (from the notebook's VARIATIONS list)
+under a run_exp3.sh output directory, where each variation's pickles are at
+<summary_directory>/<variation>/residual_raw_data_<project>.pkl:
+python3 summarize_all.py --summary_directory=run_exp3
 """
 
 import os
@@ -45,21 +45,31 @@ from absl import flags
 
 import summarize_raters as sr
 
+# Model variations from the original Colab notebook; empty strings are
+# separators between variation groups and are skipped.
+VARIATIONS = [
+    "tiny.en", "tiny", "base.en", "base", "small.en", "small", "medium.en", "medium",
+    "large", "", "large_prime", "large_prompt", "", "large_forced_-10", "large_forced_0",
+    "large_forced_10", "large_forced_20", "large_forced_100", "", "large_exact_-10",
+    "large_exact_0", "large_exact_10", "large_exact_20", "large_exact_100",
+]
+
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "input_pickles",
-    "quick:residual_raw_data_quick.pkl,win:residual_raw_data_win.pkl",
+    "",
     "Comma separated list of label:path pairs, one per project. Each path is "
     "a pickled DataFrame produced by summarize_raters.py --dump_raw_data. "
-    "Local paths are joined onto --summary_directory, if set; http(s) URLs "
-    "are used as-is.",
+    "Paths may also be http(s) URLs. Combined with any pairs discovered via "
+    "--summary_directory.",
 )
 flags.DEFINE_string(
     "summary_directory",
     "",
-    "Directory prepended to each local path in --input_pickles (e.g. a "
-    "run_exp3.sh model-variation directory holding residual_raw_data_*.pkl "
-    "files). Ignored for http(s) URLs.",
+    "Base directory holding one subdirectory per model variation (as produced "
+    "by run_exp3.sh); pickles are expected at "
+    "<summary_directory>/<variation>/residual_raw_data_<project>.pkl for each "
+    "variation in VARIATIONS. Missing files are skipped.",
 )
 flags.DEFINE_string(
     "output_dir",
@@ -124,6 +134,33 @@ def parse_input_pickles(spec: str) -> List[Tuple[str, str]]:
             continue
         label, _, path = item.partition(":")
         pairs.append((label.strip(), path.strip()))
+    return pairs
+
+
+def find_summary_directory_pickles(summary_directory: str) -> List[Tuple[str, str]]:
+    """Build label:path pairs for each known variation under ``--summary_directory``.
+
+    For each non-empty entry in :data:`VARIATIONS`, looks for
+    ``<summary_directory>/<variation>/residual_raw_data_<project>.pkl`` for
+    both the ``quick`` and ``win`` projects. Variations with no matching files
+    are skipped with a printed warning.
+
+    Args:
+        summary_directory: Base directory holding one subdirectory per variation.
+
+    Returns:
+        List of ``(label, path)`` tuples, labeled ``<variation>_<project>``.
+    """
+    pairs = []
+    for variation in VARIATIONS:
+        if not variation:
+            continue
+        for project in ("quick", "win"):
+            path = os.path.join(summary_directory, variation, f"residual_raw_data_{project}.pkl")
+            if not os.path.exists(path):
+                print(f"Skipping missing pickle: {path}")
+                continue
+            pairs.append((f"{variation}_{project}", path))
     return pairs
 
 
@@ -455,14 +492,13 @@ def main(argv: List[str]) -> None:
     professional_raters = sr.read_professional_raters(FLAGS.professional_raters)
 
     input_pickles = parse_input_pickles(FLAGS.input_pickles)
-    if not input_pickles:
-        raise ValueError("--input_pickles must specify at least one label:path pair.")
     if FLAGS.summary_directory:
-        input_pickles = [
-            (label, path if path.startswith(("http://", "https://"))
-             else os.path.join(FLAGS.summary_directory, path))
-            for label, path in input_pickles
-        ]
+        input_pickles += find_summary_directory_pickles(FLAGS.summary_directory)
+    if not input_pickles:
+        raise ValueError(
+            "Must specify at least one label:path pair via --input_pickles "
+            "and/or a --summary_directory."
+        )
 
     if not FLAGS.no_user_plots:
         os.makedirs(FLAGS.output_dir, exist_ok=True)
