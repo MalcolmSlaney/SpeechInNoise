@@ -21,10 +21,10 @@ python3 summarize_all.py \
   --professional_raters=metadata/professional_raters.txt \
   --ground_truth_column=SRT_Audiologist_and_Raters_Median
 
-Or, to load every known model variation (from the notebook's VARIATIONS list)
-under a run_exp3.sh output directory, where each variation's pickles are at
-<summary_directory>/<variation>/residual_raw_data_<project>.pkl:
-python3 summarize_all.py --summary_directory=run_exp3
+Or, to analyze a single model variation's pickles from a run_exp3.sh output
+directory (--summary_directory is joined onto each local path in
+--input_pickles):
+python3 summarize_all.py --summary_directory=run_exp3/medium
 """
 
 import os
@@ -45,33 +45,19 @@ from absl import flags
 
 import summarize_raters as sr
 
-# Model variations from the original Colab notebook; empty strings are
-# separators between variation groups and are skipped.
-VARIATIONS = [
-    "tiny.en", "tiny", "base.en", "base", "small.en", "small", "medium.en", "medium",
-    "large", "", "large_prime", "large_prompt", "", "large_forced_-10", "large_forced_0",
-    "large_forced_10", "large_forced_20", "large_forced_100", "", "large_exact_-10",
-    "large_exact_0", "large_exact_10", "large_exact_20", "large_exact_100",
-]
-
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "input_pickles",
     "quick:residual_raw_data_quick.pkl,win:residual_raw_data_win.pkl",
-    "Comma separated list of label:path pairs, one per project. When "
-    "--summary_directory is not set, each path is used as-is (a local path or "
-    "http(s) URL) to a pickled DataFrame produced by "
-    "summarize_raters.py --dump_raw_data. When --summary_directory is set, "
-    "each path is instead treated as a generic filename that is expanded "
-    "across every variation in VARIATIONS.",
+    "Comma separated list of label:path pairs, one per project. Local paths "
+    "are joined onto --summary_directory, if set; http(s) URLs are used "
+    "as-is.",
 )
 flags.DEFINE_string(
     "summary_directory",
     "",
-    "Base directory holding one subdirectory per model variation (as produced "
-    "by run_exp3.sh). When set, replaces --input_pickles with "
-    "<summary_directory>/<variation>/<path> for each variation in VARIATIONS "
-    "and each path in --input_pickles. Missing files are skipped.",
+    "Directory holding one model variation's pickles (as produced by "
+    "run_exp3.sh), joined onto each local path in --input_pickles.",
 )
 flags.DEFINE_string(
     "output_dir",
@@ -139,35 +125,23 @@ def parse_input_pickles(spec: str) -> List[Tuple[str, str]]:
     return pairs
 
 
-def find_summary_directory_pickles(
-    summary_directory: str, input_pickles: List[Tuple[str, str]]
-) -> List[Tuple[str, str]]:
-    """Expand generic label:path pairs across every known model variation.
-
-    For each non-empty entry in :data:`VARIATIONS` and each ``(label, path)``
-    in ``input_pickles``, looks for
-    ``<summary_directory>/<variation>/<path>``. Variations with no matching
-    file are skipped with a printed warning.
+def find_summary_directory_pickles(summary_directory: str, input_pickles: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    """Join ``--summary_directory`` onto each local path in ``input_pickles``.
 
     Args:
-        summary_directory: Base directory holding one subdirectory per variation.
+        summary_directory: Directory holding one model variation's pickles.
         input_pickles: Generic ``(label, path)`` pairs, as returned by
-            :func:`parse_input_pickles` (e.g. ``("quick", "residual_raw_data_quick.pkl")``).
+            :func:`parse_input_pickles`.
 
     Returns:
-        List of ``(label, path)`` tuples, labeled ``<variation>_<label>``.
+        List of ``(label, path)`` tuples with local paths joined onto
+        ``summary_directory``; http(s) URLs are left unchanged.
     """
-    pairs = []
-    for variation in VARIATIONS:
-        if not variation:
-            continue
-        for label, path in input_pickles:
-            full_path = os.path.join(summary_directory, variation, path)
-            if not os.path.exists(full_path):
-                print(f"Skipping missing pickle: {full_path}")
-                continue
-            pairs.append((f"{variation}_{label}", full_path))
-    return pairs
+    return [
+        (label, path if path.startswith(("http://", "https://"))
+         else os.path.join(summary_directory, path))
+        for label, path in input_pickles
+    ]
 
 
 def calculate_srt_logistic(x_data, y_data) -> Tuple[float, Tuple[float, float]]:
@@ -457,14 +431,17 @@ def plot_srt_diff_histogram_with_users(
 
 
 def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
-    """Save a grid of SRT-difference histograms, one row per project.
+    """Save a grid of SRT-difference histograms, one row per label.
 
     Each row compares Audiologist-vs-ground-truth and ASR-vs-ground-truth SRT
-    differences for one project's users.
+    differences for one label's users (e.g. ``quick`` or ``win``).
 
     Args:
-        all_srts: Mapping from project label to its per-user SRT DataFrame, as
+        all_srts: Mapping from label to its per-user SRT DataFrame, as
             returned by :func:`calculate_all_user_srts`.
+
+    Returns:
+        None. Writes the figure to ``--histogram_plot``.
     """
     labels = list(all_srts.keys())
     figure, axes = plt.subplots(len(labels), 2, figsize=(15, 6 * len(labels)), squeeze=False)
@@ -489,7 +466,7 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
 
 
 def main(argv: List[str]) -> None:
-    """Fit SRTs for each project, save per-user plots, and the summary histogram.
+    """Fit SRTs for one variation's projects, save per-user plots and histogram.
 
     Args:
         argv: Unused command-line arguments (consumed by ABSL).
@@ -501,10 +478,7 @@ def main(argv: List[str]) -> None:
     if FLAGS.summary_directory:
         input_pickles = find_summary_directory_pickles(FLAGS.summary_directory, input_pickles)
     if not input_pickles:
-        raise ValueError(
-            "Must specify at least one label:path pair via --input_pickles "
-            "and/or a --summary_directory."
-        )
+        raise ValueError("--input_pickles must specify at least one label:path pair.")
 
     if not FLAGS.no_user_plots:
         os.makedirs(FLAGS.output_dir, exist_ok=True)
@@ -524,6 +498,7 @@ def main(argv: List[str]) -> None:
             print(f"Wrote {len(srts_df)} per-user SRT fit plots to {FLAGS.output_dir}")
 
     create_summary_histogram(all_srts)
+
 
 
 if __name__ == "__main__":
