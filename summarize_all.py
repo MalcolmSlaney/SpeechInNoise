@@ -20,6 +20,10 @@ python3 summarize_all.py \
   --histogram_bins=10 \
   --professional_raters=metadata/professional_raters.txt \
   --ground_truth_column=SRT_Audiologist_and_Raters_Median
+
+Or, to load every model variation under a run_exp3-style directory (each
+subdirectory holding residual_raw_data_quick.pkl/residual_raw_data_win.pkl):
+python3 summarize_all.py --summary_directory=run_exp3
 """
 
 import os
@@ -43,10 +47,19 @@ import summarize_raters as sr
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "input_pickles",
-    "quick:residual_raw_data_quick.pkl,win:residual_raw_data_win.pkl",
+    "",
     "Comma separated list of label:path pairs, one per project. Each path is "
     "a pickled DataFrame produced by summarize_raters.py --dump_raw_data. "
-    "Paths may also be http(s) URLs.",
+    "Paths may also be http(s) URLs. Combined with any pairs discovered via "
+    "--summary_directory.",
+)
+flags.DEFINE_string(
+    "summary_directory",
+    "",
+    "Directory containing one subdirectory per model variation (as produced by "
+    "run_exp3.sh), each holding 'residual_raw_data_quick.pkl' and "
+    "'residual_raw_data_win.pkl'. Every variation/project pair found is loaded "
+    "and labeled '<variation>_<project>'.",
 )
 flags.DEFINE_string(
     "output_dir",
@@ -111,6 +124,32 @@ def parse_input_pickles(spec: str) -> List[Tuple[str, str]]:
             continue
         label, _, path = item.partition(":")
         pairs.append((label.strip(), path.strip()))
+    return pairs
+
+
+def find_summary_directory_pickles(summary_directory: str) -> List[Tuple[str, str]]:
+    """Discover per-variation quick/win pickles under ``--summary_directory``.
+
+    Each immediate subdirectory of ``summary_directory`` is treated as one
+    model variation (as produced by ``run_exp3.sh``). Any
+    ``residual_raw_data_<project>.pkl`` file found directly inside a variation
+    subdirectory is included, labeled ``<variation>_<project>``.
+
+    Args:
+        summary_directory: Directory containing one subdirectory per variation.
+
+    Returns:
+        List of ``(label, path)`` tuples, sorted by variation then project.
+    """
+    pairs = []
+    for variation in sorted(os.listdir(summary_directory)):
+        variation_dir = os.path.join(summary_directory, variation)
+        if not os.path.isdir(variation_dir):
+            continue
+        for filename in sorted(os.listdir(variation_dir)):
+            if filename.startswith("residual_raw_data_") and filename.endswith(".pkl"):
+                project = filename[len("residual_raw_data_"):-len(".pkl")]
+                pairs.append((f"{variation}_{project}", os.path.join(variation_dir, filename)))
     return pairs
 
 
@@ -442,8 +481,13 @@ def main(argv: List[str]) -> None:
     professional_raters = sr.read_professional_raters(FLAGS.professional_raters)
 
     input_pickles = parse_input_pickles(FLAGS.input_pickles)
+    if FLAGS.summary_directory:
+        input_pickles += find_summary_directory_pickles(FLAGS.summary_directory)
     if not input_pickles:
-        raise ValueError("--input_pickles must specify at least one label:path pair.")
+        raise ValueError(
+            "Must specify at least one label:path pair via --input_pickles "
+            "and/or a --summary_directory."
+        )
 
     if not FLAGS.no_user_plots:
         os.makedirs(FLAGS.output_dir, exist_ok=True)
