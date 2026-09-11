@@ -170,6 +170,11 @@ def calculate_srt_logistic(x_data, y_data):
     x_data = np.asarray(x_data)
     y_data = np.asarray(y_data)
 
+    if np.all(y_data >= 0.5):
+      return np.min(x_data), (np.nan, np.nan)
+    if np.all(y_data < 0.5):
+      return np.max(x_data), (np.nan, np.nan)
+
     # Define the logistic function
     def logistic(x, k, x0):
         return 1 / (1 + np.exp(-k * (x - x0)))
