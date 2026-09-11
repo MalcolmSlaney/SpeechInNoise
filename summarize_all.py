@@ -400,7 +400,7 @@ def plot_srt_diff_histogram_with_users(
     title: str,
     num_bins: int = 10,
     axis=None,
-    max_labels_per_bin: int = 8,
+    max_labels_per_bin: int = 20,
 ) -> None:
     """Plot a histogram of ``col1 - col2`` labeling each bar with usernames.
 
