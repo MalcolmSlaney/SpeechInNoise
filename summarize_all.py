@@ -482,7 +482,9 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
                 f"{srts_df[srt_column].notna().sum()} non-null {srt_column}, "
                 f"{srts_df[FLAGS.ground_truth_column].notna().sum()} non-null {FLAGS.ground_truth_column}, "
                 f"{len(difference)} non-null differences, "
-                f"{difference.nunique()} unique difference values."
+                f"{difference.nunique()} unique difference values, "
+                f"min={difference.min():.3f}, max={difference.max():.3f}, "
+                f"values={sorted(round(value, 2) for value in difference)}."
             )
             plot_srt_diff_histogram_with_users(
                 srts_df, srt_column, FLAGS.ground_truth_column,
