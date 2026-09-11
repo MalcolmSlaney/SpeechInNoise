@@ -993,7 +993,7 @@
           <span>Playing</span>
         `;
 
-        const audioUrl = `https://quicksin.manus.space/api/audio/${filename}`;
+        const audioUrl = `https://quicksin.stanford.edu/uploads/${filename}.wav`;
         const audio = new Audio(audioUrl);
         this.activeAudio = audio;
 
@@ -1455,7 +1455,7 @@
         showToast("No audio file available for download");
         return;
       }
-      const audioUrl = `https://quicksin.manus.space/api/audio/${filename}`;
+      const audioUrl = `https://quicksin.stanford.edu/uploads/${filename}.wav`;
       showToast(`Downloading ${filename}...`);
 
       fetch(audioUrl)
