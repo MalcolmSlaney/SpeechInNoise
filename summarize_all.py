@@ -272,7 +272,16 @@ def calculate_all_user_srts(df: pd.DataFrame, professional_raters: Set[str]) -> 
 
         all_srts.append(user_srts)
 
-    return pd.DataFrame(all_srts).set_index("username")
+    srts_df = pd.DataFrame(all_srts).set_index("username")
+    print(
+        f"SRT fit coverage: {len(srts_df)} users total; "
+        f"{srts_df['SRT_Audiologist'].notna().sum()} with valid SRT_Audiologist; "
+        f"{srts_df['SRT_ASR'].notna().sum()} with valid SRT_ASR; "
+        f"{srts_df['SRT_Professional_Raters_Median'].notna().sum()} with at least one valid rater SRT; "
+        f"{srts_df['SRT_Audiologist_and_Raters_Median'].notna().sum()} with a valid ground truth "
+        "(users missing ground truth are dropped from every histogram panel)."
+    )
+    return srts_df
 
 
 def plot_user_srt_fits(
