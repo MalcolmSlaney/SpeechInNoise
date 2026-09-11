@@ -150,143 +150,216 @@ def find_summary_directory_pickles(summary_directory: str, input_pickles: List[T
     ]
 
 
-def calculate_srt_logistic(x_data, y_data) -> Tuple[float, Tuple[float, float]]:
-    """Fit a logistic curve to fraction-correct-vs-SNR data and find the SRT.
+def calculate_srt_logistic(x_data, y_data):
+    """
+    Computes a logistic fit to x and y data and calculates the Speech Reception Threshold (SRT).
 
-    The SRT is defined as the x-value where the fitted logistic curve crosses
-    0.5.
+    The SRT is defined as the x-value where the logistic function crosses 0.5.
 
     Args:
-        x_data: Independent variable values (SNR).
-        y_data: Dependent variable values (fraction correct), in ``[0, 1]``.
+        x_data (array-like): The independent variable data (e.g., SNR values).
+        y_data (array-like): The dependent variable data (e.g., fraction correct), expected to be between 0 and 1.
 
     Returns:
-        Tuple of ``(srt, (k, x0))`` where ``k`` is the fitted steepness and
-        ``x0`` is the fitted midpoint (equal to the SRT). Returns
-        ``(nan, (nan, nan))`` if the fit fails.
+        float: The calculated SRT (x-value where the fitted curve is 0.5),
+               or np.nan if the fitting fails.
+        tuple: A tuple containing the optimized parameters (k, x0) if fit is successful,
+               otherwise (np.nan, np.nan).
     """
+    # Ensure data is numpy arrays
     x_data = np.asarray(x_data)
     y_data = np.asarray(y_data)
 
+    # Define the logistic function
     def logistic(x, k, x0):
         return 1 / (1 + np.exp(-k * (x - x0)))
 
     try:
-        p0 = [1, np.mean(x_data)]
-        bounds = (
-            [0.001, np.min(x_data) - (np.max(x_data) - np.min(x_data))],
-            [np.inf, np.max(x_data) + (np.max(x_data) - np.min(x_data))],
-        )
-        params, _ = curve_fit(logistic, x_data, y_data, p0=p0, bounds=bounds)
+        # --- Robust Initial Guess (p0) for parameters ---
+
+        # Estimate x0 (SRT) by finding where y_data crosses 0.5
+        x0_guess = np.mean(x_data) # Default if interpolation isn't possible
+        if len(x_data) > 1:
+            idx_below_0_5 = np.where(y_data < 0.5)[0]
+            idx_above_0_5 = np.where(y_data >= 0.5)[0]
+
+            if len(idx_below_0_5) > 0 and len(idx_above_0_5) > 0:
+                x_low = x_data[idx_below_0_5[-1]]
+                y_low = y_data[idx_below_0_5[-1]]
+                x_high = x_data[idx_above_0_5[0]]
+                y_high = y_data[idx_above_0_5[0]]
+
+                if y_high != y_low:
+                    x0_guess = x_low + (0.5 - y_low) * (x_high - x_low) / (y_high - y_low)
+                else: # Handle case where y_low == y_high == 0.5 or other flat segments
+                    x0_guess = x_low
+            elif len(idx_below_0_5) > 0: # All y_data < 0.5, guess x0 above max x_data
+                x0_guess = np.max(x_data) + (np.max(x_data) - np.min(x_data)) / 2
+            elif len(idx_above_0_5) > 0: # All y_data >= 0.5, guess x0 below min x_data
+                x0_guess = np.min(x_data) - (np.max(x_data) - np.min(x_data)) / 2
+
+        # Estimate k (steepness)
+        k_guess = 1.0 # Default reasonable steepness
+        if len(x_data) > 1:
+            y_range = np.max(y_data) - np.min(y_data)
+            x_range = np.max(x_data) - np.min(x_data)
+            if x_range > 0 and y_range > 0:
+                # A rough estimate: max slope of logistic is k/4. So k approx 4 * (avg_slope)
+                k_guess = 4 * (y_range / x_range)
+                k_guess = max(0.01, k_guess) # Ensure k_guess is not too small (avoid division by zero or flat curve issues)
+
+        p0 = [k_guess, x0_guess]
+
+        # Bounds for parameters: k > 0, x0 within a reasonable range related to x_data
+        bounds = ([0.001, np.min(x_data) - (np.max(x_data)-np.min(x_data)) * 2],
+                  [50, np.max(x_data) + (np.max(x_data)-np.min(x_data)) * 2]) # Increased upper bound for k from 10 to 50
+
+        params, covariance = curve_fit(logistic, x_data, y_data, p0=p0, bounds=bounds, maxfev=5000) # Increased maxfev
+
         k_opt, x0_opt = params
-        return x0_opt, (k_opt, x0_opt)
-    except (RuntimeError, ValueError) as error:
-        print(f"Error fitting logistic function: {error}")
+
+        # As derived, when y = 0.5, x = x0. So x0_opt is the SRT.
+        srt = x0_opt
+
+        return srt, (k_opt, x0_opt)
+    except RuntimeError as e:
+        print(f"Error fitting logistic function: {e}") # Temporarily suppress for cleaner output
+        return np.nan, (np.nan, np.nan)
+    except ValueError as e:
+        print(f"Error with curve_fit input values: {e}") # Temporarily suppress for cleaner output
         return np.nan, (np.nan, np.nan)
 
-
-def _fit_srt_for_series(x_data, y_data_series: pd.Series) -> Tuple[float, float, float]:
-    """Fit a logistic curve to one column of grouped-by-SNR data.
+def _fit_srt_for_series(x_data, y_data_series):
+    """
+    Helper function to fit a logistic curve to a given y_data series
+    and return the SRT and optimized parameters. Handles data validity checks.
 
     Args:
-        x_data: SNR values, one per group.
-        y_data_series: Fraction-correct values aligned with ``x_data``.
+        x_data (np.array): The independent variable data (e.g., SNR values).
+        y_data_series (pd.Series): The dependent variable data (e.g., fraction correct).
 
     Returns:
-        Tuple of ``(srt, k, x0)``, or ``(nan, nan, nan)`` if there is not
-        enough variation in the data to fit a curve.
+        tuple: (srt_value, k_parameter, x0_parameter) or (np.nan, np.nan, np.nan) if fit fails.
     """
     if y_data_series.empty:
         return np.nan, np.nan, np.nan
+
     y_data = y_data_series.values
     if len(x_data) > 1 and not np.all(np.isnan(y_data)) and not np.all(y_data == y_data[0]):
-        srt, (k_opt, x0_opt) = calculate_srt_logistic(x_data, y_data)
+        srt, params = calculate_srt_logistic(x_data, y_data)
+        k_opt, x0_opt = params
         return srt, k_opt, x0_opt
     return np.nan, np.nan, np.nan
 
-
-def calculate_all_user_srts(df: pd.DataFrame, professional_raters: Set[str]) -> pd.DataFrame:
-    """Fit per-user SRTs for the audiologist, ASR, and each professional rater.
-
-    The per-user "ground truth" SRT (``SRT_Audiologist_and_Raters_Median``) is
-    the median of the audiologist SRT and each professional rater's SRT.
+def calculate_all_user_srts(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates Speech Reception Thresholds (SRTs) for each user (username) in the DataFrame
+    for Audiologist, ASR, and professional raters using logistic fit.
 
     Args:
-        df: Per-utterance DataFrame with ``snr``, ``username``,
-            ``audiologist_fraction_correct``, ``asr_fraction_correct``, and
-            ``rater_<username>`` columns, as produced by
-            ``summarize_raters.build_raw_dataframe``.
-        professional_raters: Usernames whose ``rater_<username>`` columns
-            count toward the professional-rater SRT median.
+        df (pd.DataFrame): The input DataFrame containing 'snr', 'username',
+                           'audiologist_fraction_correct', 'asr_fraction_correct',
+                           and 'rater_' columns for professional raters.
 
     Returns:
-        DataFrame indexed by ``username`` with columns ``SRT_Audiologist``,
-        ``SRT_ASR``, one ``SRT_<rater>`` column per professional rater,
-        ``SRT_Raters_Mean``, ``SRT_Professional_Raters_Median``, and
-        ``SRT_Audiologist_and_Raters_Median``.
+        pd.DataFrame: A DataFrame with 'username' as index and columns for the
+                      SRT of Audiologist, ASR, each professional rater, and their medians.
+                      Returns np.nan if SRT calculation fails for a given username/category.
     """
-    professional_rater_cols = [f"rater_{rater}" for rater in professional_raters]
     all_srts = []
 
-    for user in df["username"].unique():
-        user_data = df[df["username"] == user].dropna(subset=["snr"])
+    # Define professional raters based on previous context
+    professionals = ['anna_aupperlee@rush.edu', 'taylor.a.dalzell@vanderbilt.edu', 'cquarum@stanfordhealthcare.org']
+    professional_rater_cols = [f'rater_{p}' for p in professionals]
+
+    # Get all unique usernames
+    users = df['username'].unique()
+
+    for user in users:
+        user_data = df[df['username'] == user].copy()
+        user_data = user_data.dropna(subset=['snr'])
+
         if user_data.empty:
             print(f"Warning: No valid SNR data for user {user}. Skipping.")
             continue
 
-        min_snr, max_snr = user_data["snr"].min(), user_data["snr"].max()
-        columns_to_mean = [
-            col for col in user_data.columns
-            if "fraction_correct" in col or col.startswith("rater_")
-        ]
-        if "snr" not in columns_to_mean:
-            columns_to_mean.insert(0, "snr")
+        # Calculate min and max SNR for the current user's data
+        min_snr = user_data['snr'].min()
+        max_snr = user_data['snr'].max()
 
-        grouped_by_snr = user_data[columns_to_mean].groupby("snr").mean()
+        # Identify columns for which to calculate the mean (all 'fraction_correct' and 'rater_' columns)
+        columns_to_mean = [col for col in user_data.columns if 'fraction_correct' in col or col.startswith('rater_')]
+
+        # Ensure 'snr' is present if it was dropped from columns_to_mean during filtering
+        if 'snr' not in columns_to_mean:
+            columns_to_mean.insert(0, 'snr')
+
+        # Select only the relevant numeric columns for aggregation
+        user_data_for_aggregation = user_data[columns_to_mean]
+
+        # Group by SNR and calculate mean fraction correct for relevant columns
+        # This ensures unique x_data points for curve_fit
+        grouped_by_snr = user_data_for_aggregation.groupby('snr').mean()
         x_data = grouped_by_snr.index.values
 
-        user_srts = {"username": user}
-        combined_srts = []
+        user_srts = {'username': user}
 
-        srt_aud, _, _ = _fit_srt_for_series(x_data, grouped_by_snr.get("audiologist_fraction_correct", pd.Series([])))
-        user_srts["SRT_Audiologist"] = np.clip(srt_aud, min_snr, max_snr) if not np.isnan(srt_aud) else np.nan
-        if not np.isnan(user_srts["SRT_Audiologist"]):
-            combined_srts.append(user_srts["SRT_Audiologist"])
+        # List to collect all individual SRTs (Audiologist + Raters) for combined median calculation
+        all_individual_srts_for_median = []
 
-        srt_asr, _, _ = _fit_srt_for_series(x_data, grouped_by_snr.get("asr_fraction_correct", pd.Series([])))
-        user_srts["SRT_ASR"] = np.clip(srt_asr, min_snr, max_snr) if not np.isnan(srt_asr) else np.nan
+        # --- Calculate SRT for Audiologist ---
+        srt_aud, k_aud, x0_aud = _fit_srt_for_series(x_data, grouped_by_snr.get('audiologist_fraction_correct', pd.Series([])))
+        if np.isnan(srt_aud):
+            print(f"DEBUG: _fit_srt_for_series returned NaN for user {user}, type: Audiologist. k_opt: {k_aud}, x0_opt: {x0_aud}")
+        # Apply clamping
+        user_srts['SRT_Audiologist'] = np.clip(srt_aud, min_snr, max_snr) if not np.isnan(srt_aud) else np.nan
+        if not np.isnan(user_srts['SRT_Audiologist']):
+            all_individual_srts_for_median.append(user_srts['SRT_Audiologist'])
 
-        rater_srts = []
+        # --- Calculate SRT for ASR ---
+        srt_asr, k_asr, x0_asr = _fit_srt_for_series(x_data, grouped_by_snr.get('asr_fraction_correct', pd.Series([])))
+        if np.isnan(srt_asr):
+            print(f"DEBUG: _fit_srt_for_series returned NaN for user {user}, type: ASR. k_opt: {k_asr}, x0_opt: {x0_asr}")
+        # Apply clamping
+        user_srts['SRT_ASR'] = np.clip(srt_asr, min_snr, max_snr) if not np.isnan(srt_asr) else np.nan
+
+
+        # --- Calculate SRT for each Professional Rater ---
+        rater_srts_list = []
         for rater_col in professional_rater_cols:
-            if rater_col not in grouped_by_snr.columns:
-                user_srts[f"SRT_{rater_col.replace('rater_', '')}"] = np.nan
-                continue
-            srt_rater, _, _ = _fit_srt_for_series(x_data, grouped_by_snr[rater_col])
-            clamped = np.clip(srt_rater, min_snr, max_snr) if not np.isnan(srt_rater) else np.nan
-            user_srts[f"SRT_{rater_col.replace('rater_', '')}"] = clamped
-            if not np.isnan(clamped):
-                rater_srts.append(clamped)
-                combined_srts.append(clamped)
+            if rater_col in grouped_by_snr.columns:
+                srt_rater, k_rater, x0_rater = _fit_srt_for_series(x_data, grouped_by_snr[rater_col])
+                if np.isnan(srt_rater):
+                    print(f"DEBUG: _fit_srt_for_series returned NaN for user {user}, type: {rater_col}. k_opt: {k_rater}, x0_opt: {x0_rater}")
+                # Apply clamping
+                clamped_srt_rater = np.clip(srt_rater, min_snr, max_snr) if not np.isnan(srt_rater) else np.nan
+                user_srts[f'SRT_{rater_col.replace("rater_", "")}'] = clamped_srt_rater
+                if not np.isnan(clamped_srt_rater):
+                    rater_srts_list.append(clamped_srt_rater)
+                    all_individual_srts_for_median.append(clamped_srt_rater) # Add to combined list
+            else:
+                user_srts[f'SRT_{rater_col.replace("rater_", "")}'] = np.nan
 
-        user_srts["SRT_Raters_Mean"] = np.mean(rater_srts) if rater_srts else np.nan
-        user_srts["SRT_Professional_Raters_Median"] = np.median(rater_srts) if rater_srts else np.nan
-        if combined_srts:
-            median_srt = np.median(combined_srts)
-            user_srts["SRT_Audiologist_and_Raters_Median"] = np.clip(median_srt, min_snr, max_snr)
+        # --- Calculate the mean and median of professional rater SRTs ---
+        if rater_srts_list:
+            user_srts['SRT_Raters_Mean'] = np.mean(rater_srts_list)
+            user_srts['SRT_Professional_Raters_Median'] = np.median(rater_srts_list)
         else:
-            user_srts["SRT_Audiologist_and_Raters_Median"] = np.nan
+            user_srts['SRT_Raters_Mean'] = np.nan
+            user_srts['SRT_Professional_Raters_Median'] = np.nan
+
+        # --- Calculate the median of Audiologist and Professional Raters combined ---
+        if all_individual_srts_for_median:
+            median_srt = np.median(all_individual_srts_for_median)
+            # Clip the median SRT to be within the min/max SNR of the user's data
+            user_srts['SRT_Audiologist_and_Raters_Median'] = np.clip(median_srt, min_snr, max_snr)
+        else:
+            user_srts['SRT_Audiologist_and_Raters_Median'] = np.nan
 
         all_srts.append(user_srts)
 
-    srts_df = pd.DataFrame(all_srts).set_index("username")
-    print(
-        f"SRT fit coverage: {len(srts_df)} users total; "
-        f"{srts_df['SRT_Audiologist'].notna().sum()} with valid SRT_Audiologist; "
-        f"{srts_df['SRT_ASR'].notna().sum()} with valid SRT_ASR; "
-        f"{srts_df['SRT_Professional_Raters_Median'].notna().sum()} with at least one valid rater SRT; "
-        f"{srts_df['SRT_Audiologist_and_Raters_Median'].notna().sum()} with a valid ground truth "
-        "(users missing ground truth are dropped from every histogram panel)."
-    )
+    srts_df = pd.DataFrame(all_srts)
+    srts_df = srts_df.set_index('username')
     return srts_df
 
 
