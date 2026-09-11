@@ -295,6 +295,7 @@ def plot_user_srt_fits(
     username: str,
     srts_df: pd.DataFrame,
     professional_raters: Set[str],
+    label: str,
     save_path: Optional[str] = None,
 ) -> None:
     """Plot raw SNR data and logistic fits for one user, optionally saving it.
@@ -310,6 +311,8 @@ def plot_user_srt_fits(
         srts_df: Per-user SRT DataFrame, as returned by :func:`calculate_all_user_srts`.
         professional_raters: Usernames whose ``rater_<username>`` columns are
             included as separate panels.
+        label: Project/variation label (e.g. ``quick`` or ``win``), shown in
+            the figure title.
         save_path: If given, save the figure to this path (and close it)
             instead of leaving it open for interactive display.
     """
@@ -389,7 +392,7 @@ def plot_user_srt_fits(
         if bottom_row_index < len(axes) and bottom_row_index >= len(columns) - ncols:
             axes[bottom_row_index].set_xlabel("SNR")
 
-    figure.suptitle(f"SRT Logistic Fits for User: {username}", y=1.02)
+    figure.suptitle(f"SRT Logistic Fits for User: {username} ({label})", y=1.02)
     figure.tight_layout(rect=[0, 0.03, 1, 0.98])
 
     if save_path:
@@ -542,7 +545,7 @@ def main(argv: List[str]) -> None:
         if not FLAGS.no_user_plots:
             for username in srts_df.index:
                 save_path = os.path.join(FLAGS.output_dir, f"{label}_{username}_srt_fit.png")
-                plot_user_srt_fits(dataframe, username, srts_df, professional_raters, save_path=save_path)
+                plot_user_srt_fits(dataframe, username, srts_df, professional_raters, label, save_path=save_path)
             print(f"Wrote {len(srts_df)} per-user SRT fit plots to {FLAGS.output_dir}")
 
     create_summary_histogram(all_srts)
