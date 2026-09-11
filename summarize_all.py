@@ -433,8 +433,11 @@ def plot_srt_diff_histogram_with_users(
 def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
     """Save a 2x2 grid of SRT-difference histograms.
 
-    Rows compare Audiologist-vs-ground-truth and ASR-vs-ground-truth SRTs;
-    columns are the input labels (e.g. ``quick`` and ``win``).
+    Rows are the input labels (e.g. ``win`` and ``quick``, in the order given
+    by ``--input_pickles``/``--summary_directory``); columns compare
+    Audiologist-vs-ground-truth and ASR-vs-ground-truth SRTs. Each panel is a
+    single histogram summarizing the differences across all of that label's
+    users.
 
     Args:
         all_srts: Mapping from label to its per-user SRT DataFrame, as
@@ -446,11 +449,11 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
     labels = list(all_srts.keys())
     comparisons = [("SRT_Audiologist", "Audiologist"), ("SRT_ASR", "ASR")]
     figure, axes = plt.subplots(
-        len(comparisons), len(labels), figsize=(7.5 * len(labels), 6 * len(comparisons)), squeeze=False,
+        len(labels), len(comparisons), figsize=(7.5 * len(comparisons), 6 * len(labels)), squeeze=False,
     )
 
-    for row, (srt_column, comparison_name) in enumerate(comparisons):
-        for col, label in enumerate(labels):
+    for row, label in enumerate(labels):
+        for col, (srt_column, comparison_name) in enumerate(comparisons):
             plot_srt_diff_histogram_with_users(
                 all_srts[label], srt_column, FLAGS.ground_truth_column,
                 f"{comparison_name} vs. Ground Truth ({label})",
