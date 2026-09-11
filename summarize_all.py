@@ -57,19 +57,21 @@ VARIATIONS = [
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "input_pickles",
-    "",
-    "Comma separated list of label:path pairs, one per project. Each path is "
-    "a pickled DataFrame produced by summarize_raters.py --dump_raw_data. "
-    "Paths may also be http(s) URLs. Combined with any pairs discovered via "
-    "--summary_directory.",
+    "quick:residual_raw_data_quick.pkl,win:residual_raw_data_win.pkl",
+    "Comma separated list of label:path pairs, one per project. When "
+    "--summary_directory is not set, each path is used as-is (a local path or "
+    "http(s) URL) to a pickled DataFrame produced by "
+    "summarize_raters.py --dump_raw_data. When --summary_directory is set, "
+    "each path is instead treated as a generic filename that is expanded "
+    "across every variation in VARIATIONS.",
 )
 flags.DEFINE_string(
     "summary_directory",
     "",
     "Base directory holding one subdirectory per model variation (as produced "
-    "by run_exp3.sh); pickles are expected at "
-    "<summary_directory>/<variation>/residual_raw_data_<project>.pkl for each "
-    "variation in VARIATIONS. Missing files are skipped.",
+    "by run_exp3.sh). When set, replaces --input_pickles with "
+    "<summary_directory>/<variation>/<path> for each variation in VARIATIONS "
+    "and each path in --input_pickles. Missing files are skipped.",
 )
 flags.DEFINE_string(
     "output_dir",
@@ -137,30 +139,34 @@ def parse_input_pickles(spec: str) -> List[Tuple[str, str]]:
     return pairs
 
 
-def find_summary_directory_pickles(summary_directory: str) -> List[Tuple[str, str]]:
-    """Build label:path pairs for each known variation under ``--summary_directory``.
+def find_summary_directory_pickles(
+    summary_directory: str, input_pickles: List[Tuple[str, str]]
+) -> List[Tuple[str, str]]:
+    """Expand generic label:path pairs across every known model variation.
 
-    For each non-empty entry in :data:`VARIATIONS`, looks for
-    ``<summary_directory>/<variation>/residual_raw_data_<project>.pkl`` for
-    both the ``quick`` and ``win`` projects. Variations with no matching files
-    are skipped with a printed warning.
+    For each non-empty entry in :data:`VARIATIONS` and each ``(label, path)``
+    in ``input_pickles``, looks for
+    ``<summary_directory>/<variation>/<path>``. Variations with no matching
+    file are skipped with a printed warning.
 
     Args:
         summary_directory: Base directory holding one subdirectory per variation.
+        input_pickles: Generic ``(label, path)`` pairs, as returned by
+            :func:`parse_input_pickles` (e.g. ``("quick", "residual_raw_data_quick.pkl")``).
 
     Returns:
-        List of ``(label, path)`` tuples, labeled ``<variation>_<project>``.
+        List of ``(label, path)`` tuples, labeled ``<variation>_<label>``.
     """
     pairs = []
     for variation in VARIATIONS:
         if not variation:
             continue
-        for project in ("quick", "win"):
-            path = os.path.join(summary_directory, variation, f"residual_raw_data_{project}.pkl")
-            if not os.path.exists(path):
-                print(f"Skipping missing pickle: {path}")
+        for label, path in input_pickles:
+            full_path = os.path.join(summary_directory, variation, path)
+            if not os.path.exists(full_path):
+                print(f"Skipping missing pickle: {full_path}")
                 continue
-            pairs.append((f"{variation}_{project}", path))
+            pairs.append((f"{variation}_{label}", full_path))
     return pairs
 
 
@@ -493,7 +499,7 @@ def main(argv: List[str]) -> None:
 
     input_pickles = parse_input_pickles(FLAGS.input_pickles)
     if FLAGS.summary_directory:
-        input_pickles += find_summary_directory_pickles(FLAGS.summary_directory)
+        input_pickles = find_summary_directory_pickles(FLAGS.summary_directory, input_pickles)
     if not input_pickles:
         raise ValueError(
             "Must specify at least one label:path pair via --input_pickles "
