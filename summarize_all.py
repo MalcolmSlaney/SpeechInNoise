@@ -85,6 +85,12 @@ flags.DEFINE_string(
     "Column in the per-user SRT DataFrame to use as ground truth (the median "
     "of the audiologist SRT and each professional rater's SRT).",
 )
+flags.DEFINE_float(
+    "outlier_threshold",
+    2.0,
+    "Absolute SRT difference above which a user counts as an outlier in the "
+    "SRT_DIFF_OUTLIER_COUNTS summary line.",
+)
 
 
 def _load_dataframe(path: str) -> pd.DataFrame:
@@ -472,10 +478,12 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
         len(labels), len(comparisons), figsize=(7.5 * len(comparisons), 6 * len(labels)), squeeze=False,
     )
 
+    outlier_counts = {}
     for row, label in enumerate(labels):
         srts_df = all_srts[label]
         for col, (srt_column, comparison_name) in enumerate(comparisons):
             difference = (srts_df[srt_column] - srts_df[FLAGS.ground_truth_column]).dropna()
+            outlier_counts[(label, comparison_name)] = int((difference.abs() > FLAGS.outlier_threshold).sum())
             print(
                 f"Histogram panel ({label}, {comparison_name}): "
                 f"{len(srts_df)} rows in srts_df, "
@@ -496,6 +504,13 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
     figure.savefig(FLAGS.histogram_plot, dpi=150)
     plt.close(figure)
     print(f"Wrote SRT difference histogram to {FLAGS.histogram_plot}")
+
+    summary = ", ".join(
+        f"{label}_{comparison_name}={outlier_counts[(label, comparison_name)]}"
+        for label in labels
+        for _, comparison_name in comparisons
+    )
+    print(f"SRT_DIFF_OUTLIER_COUNTS (threshold={FLAGS.outlier_threshold}): {summary}")
 
 
 def main(argv: List[str]) -> None:

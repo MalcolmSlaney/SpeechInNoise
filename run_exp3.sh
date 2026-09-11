@@ -17,6 +17,9 @@ set -euo pipefail
 #    run_exp3/TAG/quicksin_results.csv
 # 5) runs summarize_raters.py for each of the target projects (quick, win) and
 #     saves the output to run_exp3/TAG/summarize_raters_PROJECT.log
+# 6) runs summarize_all.py for each target project (when raw data was dumped),
+#     writing per-user SRT plots to run_exp3/TAG/srt_plots_PROJECT/ and the
+#     summary histogram to run_exp3/TAG/srt_diff_histogram_PROJECT.png
 #
 # Flags:
 #   --recompute_all  Disable done-file checks and recompute all tags.
@@ -185,5 +188,17 @@ for line in "${job_lines[@]}"; do
     fi
     echo "[$tag] Running: ${summary_cmd[*]} > $summary_log"
     "${summary_cmd[@]}" < /dev/null > "$summary_log" 2>&1
+
+    if [[ "$dump_raw_data" == true ]]; then
+      summarize_all_log="$tag_dir/summarize_all_${project}.log"
+      summarize_all_cmd=(
+        python "$SCRIPT_DIR/summarize_all.py"
+        --input_pickles="${project}:$tag_dir/residual_raw_data_${project}.pkl"
+        --output_dir="$tag_dir/srt_plots_${project}"
+        --histogram_plot="$tag_dir/srt_diff_histogram_${project}.png"
+      )
+      echo "[$tag] Running: ${summarize_all_cmd[*]} > $summarize_all_log"
+      "${summarize_all_cmd[@]}" < /dev/null > "$summarize_all_log" 2>&1
+    fi
   done
 done
