@@ -400,6 +400,7 @@ def plot_srt_diff_histogram_with_users(
     title: str,
     num_bins: int = 10,
     axis=None,
+    max_labels_per_bin: int = 8,
 ) -> None:
     """Plot a histogram of ``col1 - col2`` labeling each bar with usernames.
 
@@ -410,6 +411,9 @@ def plot_srt_diff_histogram_with_users(
         title: Panel title.
         num_bins: Number of histogram bins.
         axis: Matplotlib ``Axes`` to draw on; a new figure is created if ``None``.
+        max_labels_per_bin: Maximum usernames to list per bin before
+            collapsing the rest into a "+N more" suffix (avoids the label
+            text overflowing the plot when many users share a bin).
     """
     difference = (srts_df[col1] - srts_df[col2]).dropna()
 
@@ -422,6 +426,8 @@ def plot_srt_diff_histogram_with_users(
         return
 
     counts, bins, patches = axis.hist(difference, bins=num_bins, edgecolor="black", alpha=0.7)
+    # Leave headroom above the tallest bar for the stacked username labels.
+    axis.set_ylim(0, max(counts) * 1.15 + 1)
     for i, patch in enumerate(patches):
         bin_start, bin_end = bins[i], bins[i + 1]
         if i == len(patches) - 1:
@@ -429,13 +435,18 @@ def plot_srt_diff_histogram_with_users(
         else:
             users_in_bin = difference[(difference >= bin_start) & (difference < bin_end)].index.tolist()
         if users_in_bin:
+            if len(users_in_bin) > max_labels_per_bin:
+                shown = users_in_bin[:max_labels_per_bin]
+                shown.append(f"+{len(users_in_bin) - max_labels_per_bin} more")
+            else:
+                shown = users_in_bin
             x_center = patch.get_x() + patch.get_width() / 2
             y_position = patch.get_y() + 0.5
-            axis.text(x_center, y_position, "\n".join(users_in_bin), ha="center", va="bottom", fontsize=8, color="black")
+            axis.text(x_center, y_position, "\n".join(shown), ha="center", va="bottom", fontsize=8, color="black")
 
     axis.set_xlabel("Difference in SRTs")
     axis.set_ylabel("Frequency")
-    axis.set_title(title)
+    axis.set_title(f"{title} (n={len(difference)})")
     axis.grid(axis="y", alpha=0.75)
 
 
