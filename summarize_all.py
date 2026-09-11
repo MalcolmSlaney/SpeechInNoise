@@ -431,10 +431,10 @@ def plot_srt_diff_histogram_with_users(
 
 
 def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
-    """Save a grid of SRT-difference histograms, one row per label.
+    """Save a 2x2 grid of SRT-difference histograms.
 
-    Each row compares Audiologist-vs-ground-truth and ASR-vs-ground-truth SRT
-    differences for one label's users (e.g. ``quick`` or ``win``).
+    Rows compare Audiologist-vs-ground-truth and ASR-vs-ground-truth SRTs;
+    columns are the input labels (e.g. ``quick`` and ``win``).
 
     Args:
         all_srts: Mapping from label to its per-user SRT DataFrame, as
@@ -444,20 +444,18 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
         None. Writes the figure to ``--histogram_plot``.
     """
     labels = list(all_srts.keys())
-    figure, axes = plt.subplots(len(labels), 2, figsize=(15, 6 * len(labels)), squeeze=False)
+    comparisons = [("SRT_Audiologist", "Audiologist"), ("SRT_ASR", "ASR")]
+    figure, axes = plt.subplots(
+        len(comparisons), len(labels), figsize=(7.5 * len(labels), 6 * len(comparisons)), squeeze=False,
+    )
 
-    for row, label in enumerate(labels):
-        srts_df = all_srts[label]
-        plot_srt_diff_histogram_with_users(
-            srts_df, "SRT_Audiologist", FLAGS.ground_truth_column,
-            f"SRTs: Audiologist vs. Ground Truth ({label})",
-            num_bins=FLAGS.histogram_bins, axis=axes[row][0],
-        )
-        plot_srt_diff_histogram_with_users(
-            srts_df, "SRT_ASR", FLAGS.ground_truth_column,
-            f"SRTs: ASR vs. Ground Truth ({label})",
-            num_bins=FLAGS.histogram_bins, axis=axes[row][1],
-        )
+    for row, (srt_column, comparison_name) in enumerate(comparisons):
+        for col, label in enumerate(labels):
+            plot_srt_diff_histogram_with_users(
+                all_srts[label], srt_column, FLAGS.ground_truth_column,
+                f"{comparison_name} vs. Ground Truth ({label})",
+                num_bins=FLAGS.histogram_bins, axis=axes[row][col],
+            )
 
     figure.tight_layout()
     figure.savefig(FLAGS.histogram_plot, dpi=150)
@@ -498,7 +496,6 @@ def main(argv: List[str]) -> None:
             print(f"Wrote {len(srts_df)} per-user SRT fit plots to {FLAGS.output_dir}")
 
     create_summary_histogram(all_srts)
-
 
 
 if __name__ == "__main__":
