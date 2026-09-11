@@ -473,9 +473,19 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
     )
 
     for row, label in enumerate(labels):
+        srts_df = all_srts[label]
         for col, (srt_column, comparison_name) in enumerate(comparisons):
+            difference = (srts_df[srt_column] - srts_df[FLAGS.ground_truth_column]).dropna()
+            print(
+                f"Histogram panel ({label}, {comparison_name}): "
+                f"{len(srts_df)} rows in srts_df, "
+                f"{srts_df[srt_column].notna().sum()} non-null {srt_column}, "
+                f"{srts_df[FLAGS.ground_truth_column].notna().sum()} non-null {FLAGS.ground_truth_column}, "
+                f"{len(difference)} non-null differences, "
+                f"{difference.nunique()} unique difference values."
+            )
             plot_srt_diff_histogram_with_users(
-                all_srts[label], srt_column, FLAGS.ground_truth_column,
+                srts_df, srt_column, FLAGS.ground_truth_column,
                 f"{comparison_name} vs. Ground Truth ({label})",
                 num_bins=FLAGS.histogram_bins, axis=axes[row][col],
             )
