@@ -256,7 +256,9 @@ def _fit_srt_for_series(x_data, y_data_series):
         return srt, k_opt, x0_opt
     return np.nan, np.nan, np.nan
 
-def calculate_all_user_srts(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_all_user_srts(
+    df: pd.DataFrame, professional_raters: List[str]
+) -> pd.DataFrame:
     """
     Calculates Speech Reception Thresholds (SRTs) for each user (username) in the DataFrame
     for Audiologist, ASR, and professional raters using logistic fit.
@@ -265,6 +267,8 @@ def calculate_all_user_srts(df: pd.DataFrame) -> pd.DataFrame:
         df (pd.DataFrame): The input DataFrame containing 'snr', 'username',
                            'audiologist_fraction_correct', 'asr_fraction_correct',
                            and 'rater_' columns for professional raters.
+        professional_raters: Professional rater usernames loaded from the
+            ``--professional_raters`` flag.
 
     Returns:
         pd.DataFrame: A DataFrame with 'username' as index and columns for the
@@ -273,9 +277,7 @@ def calculate_all_user_srts(df: pd.DataFrame) -> pd.DataFrame:
     """
     all_srts = []
 
-    # Define professional raters based on previous context
-    professionals = ['anna_aupperlee@rush.edu', 'taylor.a.dalzell@vanderbilt.edu', 'cquarum@stanfordhealthcare.org']
-    professional_rater_cols = [f'rater_{p}' for p in professionals]
+    professional_rater_cols = [f'rater_{rater}' for rater in professional_raters]
 
     # Get all unique usernames
     users = df['username'].unique()
@@ -372,7 +374,7 @@ def plot_user_srt_fits(
     df: pd.DataFrame,
     username: str,
     srts_df: pd.DataFrame,
-    professional_raters: Set[str],
+    professional_raters: List[str],
     label: str,
     save_path: Optional[str] = None,
 ) -> None:
@@ -601,7 +603,7 @@ def main(argv: List[str]) -> None:
         argv: Unused command-line arguments (consumed by ABSL).
     """
     del argv
-    professional_raters = sr.read_professional_raters(FLAGS.professional_raters)
+    professional_raters = sorted(sr.read_professional_raters(FLAGS.professional_raters))
 
     input_pickles = parse_input_pickles(FLAGS.input_pickles)
     if FLAGS.summary_directory:
