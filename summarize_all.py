@@ -575,6 +575,7 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
                 f"{len(difference)} non-null differences, "
                 f"{difference.nunique()} unique difference values, "
                 f"min={difference.min():.3f}, max={difference.max():.3f}, "
+                f"std={difference.std():.3f}, "
                 f"values={sorted(round(value, 2) for value in difference)}."
             )
             plot_srt_diff_histogram_with_users(
