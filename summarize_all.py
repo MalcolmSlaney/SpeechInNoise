@@ -562,11 +562,13 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
     )
 
     outlier_counts = {}
+    stds = {} 
     for row, label in enumerate(labels):
         srts_df = all_srts[label]
         for col, (srt_column, comparison_name) in enumerate(comparisons):
             difference = (srts_df[srt_column] - srts_df[FLAGS.ground_truth_column]).dropna()
             outlier_counts[(label, comparison_name)] = int((difference.abs() > FLAGS.outlier_threshold).sum())
+            stds[(label, comparison_name)] = difference.std()
             print(
                 f"Histogram panel ({label}, {comparison_name}): "
                 f"{len(srts_df)} rows in srts_df, "
@@ -595,6 +597,13 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
         for _, comparison_name in comparisons
     )
     print(f"SRT_DIFF_OUTLIER_COUNTS (threshold={FLAGS.outlier_threshold}): {summary}")
+
+    std_summary = ", ".join(
+        f"{label}_{comparison_name}={stds[(label, comparison_name)]:.3f}"
+        for label in labels
+        for _, comparison_name in comparisons
+    )
+    print(f"SRT_DIFF_STDS: {std_summary}")
 
 
 def main(argv: List[str]) -> None:
