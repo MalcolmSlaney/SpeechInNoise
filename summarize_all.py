@@ -19,7 +19,7 @@ python3 summarize_all.py \
   --histogram_plot=srt_diff_histogram.png \
   --histogram_bins=10 \
   --professional_raters=metadata/professional_raters.txt \
-  --ground_truth_column=SRT_Audiologist_and_Raters_Median
+  --ground_truth_column=SRT_Professional_Raters_Median
 
 Or, to analyze a single model variation's pickles from a run_exp3.sh output
 directory (--summary_directory is joined onto each local path in
@@ -81,7 +81,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_string(
     "ground_truth_column",
-    "SRT_Audiologist_and_Raters_Median",
+    "SRT_Professional_Raters_Median",
     "Column in the per-user SRT DataFrame to use as ground truth (the median "
     "of the audiologist SRT and each professional rater's SRT).",
 )
