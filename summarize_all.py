@@ -383,7 +383,7 @@ def plot_user_srt_fits(
     Draws one panel per available score column (audiologist, ASR, each
     professional rater, and the professional-rater mean), each with the raw
     per-SNR means, the fitted logistic curve, the fitted SRT, and the user's
-    combined median SRT (``--ground_truth_column``) marked with an X.
+    ground truth median SRT (``--ground_truth_column``) marked with an X.
 
     Args:
         df: Per-utterance DataFrame, as passed to :func:`calculate_all_user_srts`.
@@ -606,6 +606,18 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
     print(f"SRT_DIFF_STDS: {std_summary}")
 
 
+def save_all_srts(all_srts: Dict[str, pd.DataFrame], output_path: str) -> None:
+    """Save all per-label SRT DataFrames to a pickle file.
+
+    Args:
+        all_srts: Mapping from project label to its per-user SRT DataFrame.
+        output_path: Destination pickle path.
+    """
+    with open(output_path, "wb") as file:
+        pickle.dump(all_srts, file)
+    print(f"Wrote all SRT results to {output_path}")
+
+
 def main(argv: List[str]) -> None:
     """Fit SRTs for one variation's projects, save per-user plots and histogram.
 
@@ -621,8 +633,7 @@ def main(argv: List[str]) -> None:
     if not input_pickles:
         raise ValueError("--input_pickles must specify at least one label:path pair.")
 
-    if not FLAGS.no_user_plots:
-        os.makedirs(FLAGS.output_dir, exist_ok=True)
+    os.makedirs(FLAGS.output_dir, exist_ok=True)
 
     all_srts: Dict[str, pd.DataFrame] = {}
     for label, path in input_pickles:
@@ -638,6 +649,7 @@ def main(argv: List[str]) -> None:
                 plot_user_srt_fits(dataframe, username, srts_df, professional_raters, label, save_path=save_path)
             print(f"Wrote {len(srts_df)} per-user SRT fit plots to {FLAGS.output_dir}")
 
+    save_all_srts(all_srts, os.path.join(FLAGS.output_dir, "all_srts.pkl"))
     create_summary_histogram(all_srts)
 
 
