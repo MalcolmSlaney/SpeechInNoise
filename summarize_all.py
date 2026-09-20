@@ -606,6 +606,30 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
     print(f"SRT_DIFF_STDS: {std_summary}")
 
 
+def print_srt_std_summary_table(all_srts: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Print a compact summary table of SRT standard deviations by project and metric."""
+    rows = []
+    for label, srts_df in all_srts.items():
+        project_name = {"quick": "QuickSIN", "win": "WIN"}.get(str(label).lower(), str(label).title())
+        for metric_column, metric_name in [("SRT_Audiologist", "Audiologist"), ("SRT_ASR", "ASR")]:
+            values = srts_df[metric_column].dropna()
+            std_value = values.std(ddof=1) if len(values) > 1 else float("nan")
+            rows.append({
+                "Project": project_name,
+                "Metric": metric_name,
+                "StdDev": std_value,
+            })
+
+    summary_df = pd.DataFrame(rows, columns=["Project", "Metric", "StdDev"])
+    if summary_df.empty:
+        print("SRT_STD_SUMMARY\n(no valid SRT data)")
+        return summary_df
+
+    print("\nSRT_STD_SUMMARY")
+    print(summary_df.to_string(index=False, formatters={"StdDev": lambda x: "NaN" if pd.isna(x) else f"{x:.3f}"}))
+    return summary_df
+
+
 def save_all_srts(all_srts: Dict[str, pd.DataFrame], output_path: str) -> None:
     """Save all per-label SRT DataFrames to a pickle file.
 
@@ -651,6 +675,7 @@ def main(argv: List[str]) -> None:
 
     save_all_srts(all_srts, os.path.join(FLAGS.output_dir, "all_srts.pkl"))
     create_summary_histogram(all_srts)
+    print_srt_std_summary_table(all_srts)
 
 
 if __name__ == "__main__":
