@@ -81,9 +81,17 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_string(
     "ground_truth_column",
-    "SRT_Professional_Raters_Median",
-    "Column in the per-user SRT DataFrame to use as ground truth (the median "
-    "of the audiologist SRT and each professional rater's SRT).",
+    "Ground_Truth_SRT",
+    "Column in the per-user SRT DataFrame to use as ground truth. This is "
+    "computed from the professional-rater psychometric curve, either as the "
+    "median or mean across raters at each SNR.",
+)
+flags.DEFINE_enum(
+    "ground_truth_aggregation",
+    "median",
+    ["median", "mean"],
+    "How to aggregate the professional-rater psychometric curves when "
+    "computing the per-user ground-truth SRT.",
 )
 flags.DEFINE_float(
     "outlier_threshold",
@@ -256,6 +264,37 @@ def _fit_srt_for_series(x_data, y_data_series):
         return srt, k_opt, x0_opt
     return np.nan, np.nan, np.nan
 
+def calculate_ground_truth_srt(user_data: pd.DataFrame, professional_raters: List[str]) -> float:
+    """Compute a per-user ground-truth SRT from the professional raters.
+
+    For each SNR, the raters' fraction-correct values are aggregated either by
+    the median or the mean (controlled by ``--ground_truth_aggregation``), and
+    the resulting summary psychometric function is fit with the same logistic
+    routine used for the individual SRT estimates. The fitted x0 value is the
+    per-user ground truth SRT.
+    """
+    professional_rater_cols = [f'rater_{rater}' for rater in professional_raters]
+    valid_rater_cols = [
+        col for col in professional_rater_cols
+        if col in user_data.columns and pd.api.types.is_numeric_dtype(user_data[col])
+    ]
+
+    if not valid_rater_cols:
+        return np.nan
+
+    grouped_by_snr = user_data[valid_rater_cols].groupby(user_data['snr']).agg(FLAGS.ground_truth_aggregation)
+    if grouped_by_snr.empty:
+        return np.nan
+
+    summary_curve = grouped_by_snr.median(axis=1) if FLAGS.ground_truth_aggregation == "median" else grouped_by_snr.mean(axis=1)
+    x_data = summary_curve.index.values
+    if len(x_data) < 2:
+        return np.nan
+
+    srt, _, _ = _fit_srt_for_series(x_data, summary_curve)
+    return float(srt) if not np.isnan(srt) else np.nan
+
+
 def calculate_all_user_srts(
     df: pd.DataFrame, professional_raters: List[str]
 ) -> pd.DataFrame:
@@ -272,7 +311,9 @@ def calculate_all_user_srts(
 
     Returns:
         pd.DataFrame: A DataFrame with 'username' as index and columns for the
-                      SRT of Audiologist, ASR, each professional rater, and their medians.
+                      SRT of Audiologist, ASR, each professional rater, and the
+                      per-user ground-truth SRT based on the aggregated rater
+                      psychometric function.
                       Returns np.nan if SRT calculation fails for a given username/category.
     """
     all_srts = []
@@ -311,58 +352,29 @@ def calculate_all_user_srts(
 
         user_srts = {'username': user}
 
-        # List to collect all individual SRTs (Audiologist + Raters) for combined median calculation
-        all_individual_srts_for_median = []
-
         # --- Calculate SRT for Audiologist ---
         srt_aud, k_aud, x0_aud = _fit_srt_for_series(x_data, grouped_by_snr.get('audiologist_fraction_correct', pd.Series([])))
         if np.isnan(srt_aud):
             print(f"DEBUG: _fit_srt_for_series returned NaN for user {user}, type: Audiologist. k_opt: {k_aud}, x0_opt: {x0_aud}")
-        # Apply clamping
         user_srts['SRT_Audiologist'] = np.clip(srt_aud, min_snr, max_snr) if not np.isnan(srt_aud) else np.nan
-        if not np.isnan(user_srts['SRT_Audiologist']):
-            all_individual_srts_for_median.append(user_srts['SRT_Audiologist'])
 
         # --- Calculate SRT for ASR ---
         srt_asr, k_asr, x0_asr = _fit_srt_for_series(x_data, grouped_by_snr.get('asr_fraction_correct', pd.Series([])))
         if np.isnan(srt_asr):
             print(f"DEBUG: _fit_srt_for_series returned NaN for user {user}, type: ASR. k_opt: {k_asr}, x0_opt: {x0_asr}")
-        # Apply clamping
         user_srts['SRT_ASR'] = np.clip(srt_asr, min_snr, max_snr) if not np.isnan(srt_asr) else np.nan
 
-
         # --- Calculate SRT for each Professional Rater ---
-        rater_srts_list = []
         for rater_col in professional_rater_cols:
             if rater_col in grouped_by_snr.columns:
                 srt_rater, k_rater, x0_rater = _fit_srt_for_series(x_data, grouped_by_snr[rater_col])
                 if np.isnan(srt_rater):
                     print(f"DEBUG: _fit_srt_for_series returned NaN for user {user}, type: {rater_col}. k_opt: {k_rater}, x0_opt: {x0_rater}")
-                # Apply clamping
-                clamped_srt_rater = np.clip(srt_rater, min_snr, max_snr) if not np.isnan(srt_rater) else np.nan
-                user_srts[f'SRT_{rater_col.replace("rater_", "")}'] = clamped_srt_rater
-                if not np.isnan(clamped_srt_rater):
-                    rater_srts_list.append(clamped_srt_rater)
-                    all_individual_srts_for_median.append(clamped_srt_rater) # Add to combined list
+                user_srts[f'SRT_{rater_col.replace("rater_", "")}'] = np.clip(srt_rater, min_snr, max_snr) if not np.isnan(srt_rater) else np.nan
             else:
                 user_srts[f'SRT_{rater_col.replace("rater_", "")}'] = np.nan
 
-        # --- Calculate the mean and median of professional rater SRTs ---
-        if rater_srts_list:
-            user_srts['SRT_Raters_Mean'] = np.mean(rater_srts_list)
-            user_srts['SRT_Professional_Raters_Median'] = np.median(rater_srts_list)
-        else:
-            user_srts['SRT_Raters_Mean'] = np.nan
-            user_srts['SRT_Professional_Raters_Median'] = np.nan
-
-        # --- Calculate the median of Audiologist and Professional Raters combined ---
-        if all_individual_srts_for_median:
-            median_srt = np.median(all_individual_srts_for_median)
-            # Clip the median SRT to be within the min/max SNR of the user's data
-            user_srts['SRT_Audiologist_and_Raters_Median'] = np.clip(median_srt, min_snr, max_snr)
-        else:
-            user_srts['SRT_Audiologist_and_Raters_Median'] = np.nan
-
+        user_srts['Ground_Truth_SRT'] = calculate_ground_truth_srt(user_data, professional_raters)
         all_srts.append(user_srts)
 
     srts_df = pd.DataFrame(all_srts)
@@ -533,7 +545,7 @@ def plot_srt_diff_histogram_with_users(
             y_position = patch.get_y() + 0.5
             axis.text(x_center, y_position, "\n".join(shown), ha="center", va="bottom", fontsize=8, color="black")
 
-    axis.set_xlabel("Difference in SRTs")
+    axis.set_xlabel("Difference in SRTs (dB)")
     axis.set_ylabel("Frequency")
     axis.set_title(f"{title} (n={len(difference)})")
     axis.grid(axis="y", alpha=0.75)
@@ -606,30 +618,6 @@ def create_summary_histogram(all_srts: Dict[str, pd.DataFrame]) -> None:
     print(f"SRT_DIFF_STDS: {std_summary}")
 
 
-def print_srt_std_summary_table(all_srts: Dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Print a compact summary table of SRT standard deviations by project and metric."""
-    rows = []
-    for label, srts_df in all_srts.items():
-        project_name = {"quick": "QuickSIN", "win": "WIN"}.get(str(label).lower(), str(label).title())
-        for metric_column, metric_name in [("SRT_Audiologist", "Audiologist"), ("SRT_ASR", "ASR")]:
-            values = srts_df[metric_column].dropna()
-            std_value = values.std(ddof=1) if len(values) > 1 else float("nan")
-            rows.append({
-                "Project": project_name,
-                "Metric": metric_name,
-                "StdDev": std_value,
-            })
-
-    summary_df = pd.DataFrame(rows, columns=["Project", "Metric", "StdDev"])
-    if summary_df.empty:
-        print("SRT_STD_SUMMARY\n(no valid SRT data)")
-        return summary_df
-
-    print("\nSRT_STD_SUMMARY")
-    print(summary_df.to_string(index=False, formatters={"StdDev": lambda x: "NaN" if pd.isna(x) else f"{x:.3f}"}))
-    return summary_df
-
-
 def save_all_srts(all_srts: Dict[str, pd.DataFrame], output_path: str) -> None:
     """Save all per-label SRT DataFrames to a pickle file.
 
@@ -675,7 +663,6 @@ def main(argv: List[str]) -> None:
 
     save_all_srts(all_srts, os.path.join(FLAGS.output_dir, "all_srts.pkl"))
     create_summary_histogram(all_srts)
-    print_srt_std_summary_table(all_srts)
 
 
 if __name__ == "__main__":
