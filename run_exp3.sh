@@ -25,7 +25,7 @@ set -euo pipefail
 #   --recompute_all  Disable done-file checks and recompute all tags.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-RUN_DIR="$SCRIPT_DIR/run_exp3"
+RUN_DIR="$SCRIPT_DIR/run_exp3a"        Change to new subdirectory 
 JOBS_FILE="$SCRIPT_DIR/run_exp3.jobs"
 SOURCE_DB="$SCRIPT_DIR/../jnd.emily/experiments.db"
 

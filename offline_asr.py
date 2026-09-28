@@ -560,16 +560,18 @@ def process_audio_task(task: Tuple,
             print(f'Using prompt for project {project}: {prompt_map[project]}')
         initial_prompt = prompt_map[project]
 
+    # Forced decoding: use_forced and use_exact differ only in the allowed vocabulary.
+    valid_words = None
+    if FLAGS.use_forced:
+        valid_words = valid_word_map.get(project)
+    if not valid_words and FLAGS.use_exact:
+        valid_words = [answer]
+
     asr_kwargs = {}
-    if FLAGS.use_forced and valid_word_map and project in valid_word_map:
+    if valid_words:
         if debug:
-            print(f'Using forced vocabulary for project {project}')
-        asr_kwargs['valid_words'] = valid_word_map[project]
-        asr_kwargs['oov_penalty'] = FLAGS.oov_penalty
-    elif FLAGS.use_exact:
-        if debug:
-            print(f'Using exact answer for project {project}')
-        asr_kwargs['valid_words'] = [answer]
+            print(f'Using forced vocabulary for project {project}: {valid_words}')
+        asr_kwargs['valid_words'] = valid_words
         asr_kwargs['oov_penalty'] = FLAGS.oov_penalty
 
     try:

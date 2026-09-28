@@ -88,7 +88,7 @@ flags.DEFINE_string(
 )
 flags.DEFINE_enum(
     "ground_truth_aggregation",
-    "median",
+    "mean",
     ["median", "mean"],
     "How to aggregate the professional-rater psychometric curves when "
     "computing the per-user ground-truth SRT.",
