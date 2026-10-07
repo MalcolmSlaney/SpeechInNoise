@@ -698,11 +698,25 @@ try:
                     'Whether to only show human/machine discrepancies the final html')
 except flags.DuplicateFlagError:
     pass
-flags.DEFINE_string('subject_filter', 'A\\d+[SP]\\d+', 
-                    'Regex to filter which subjects to include in the analysis.')
-flags.DEFINE_integer('debug_count', 0, 
-                     'Number of examples to print debug info for when scoring ASR system.')
-# flags.DEFINE_boolean('debug', False, 'Enable debug mode.')
+try:
+  flags.DEFINE_string('subject_filter', 'A\\d+[SP]\\d+', 
+                      'Regex to filter which subjects to include in the analysis.')
+except flags.DuplicateFlagError:
+    pass
+try:
+  flags.DEFINE_string('subject_filter', 'A\\d+[SP]\\d+', 
+                      'Regex to filter which subjects to include in the analysis.')
+except flags.DuplicateFlagError:
+    pass
+try:
+  flags.DEFINE_integer('debug_count', 0, 
+                       'Number of examples to print debug info for when scoring ASR system.')
+except flags.DuplicateFlagError:
+    pass
+try:
+  flags.DEFINE_boolean('debug', False, 'Enable debug mode.')
+except flags.DuplicateFlagError:
+    pass
 
 def main(argv):
   """Main entry point."""
