@@ -683,8 +683,11 @@ try:
                       'Where to store the final discrepancy report.')
 except flags.DuplicateFlagError:
     pass
-flags.DEFINE_bool('only_foreign', False, 
-                  'Whether to only show foreign recognizer results in discrepancies html')
+try:
+  flags.DEFINE_bool('only_foreign', False, 
+                    'Whether to only show foreign recognizer results in discrepancies html')
+except flags.DuplicateFlagError:
+    pass
 flags.DEFINE_bool('only_discrepancies', True, 
                   'Whether to only show human/machine discrepancies the final html')
 flags.DEFINE_string('subject_filter', 'A\\d+[SP]\\d+', 
