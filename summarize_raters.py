@@ -1250,9 +1250,9 @@ def _run_summary(argv: List[str]) -> None:
         allowed_raters,
     )
 
+    logging.info(f"Fetched {len(rows)} rows before filtering by asr_model={FLAGS.asr_model}")
+    dataframe = build_raw_dataframe(rows, homonyms, FLAGS.asr_model)
     if FLAGS.dump_raw_data:
-        logging.info(f"Fetched {len(rows)} rows before filtering by asr_model={FLAGS.asr_model}")
-        dataframe = build_raw_dataframe(rows, homonyms, FLAGS.asr_model)
         if dataframe.empty:
             print(f"No rows found for asr_model={FLAGS.asr_model!r}; nothing written.")
         else:
@@ -1272,6 +1272,8 @@ def _run_summary(argv: List[str]) -> None:
         create_subject_rater_plot(rows, homonyms, professional_raters, student_raters)
     if rows and not FLAGS.no_residual_plot:
         create_residual_plot(rows, homonyms, professional_raters, student_raters)
+
+    create_scatter_plot_summary(dataframe, f'scatter_plot_{FLAGS.asr_model}.png')
 
 
 if __name__ == "__main__":
