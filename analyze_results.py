@@ -673,8 +673,11 @@ try:
                       'Sqllite3 database to read the experients results.')
 except DuplicateFlagError:
     pass # Flag was already defined by another module during pytest collection
-flags.DEFINE_string('homonyms', 'homonym_list.csv', 
-                    'CSV file containing list of homonyms.')
+try:
+  flags.DEFINE_string('homonyms', 'homonym_list.csv', 
+                      'CSV file containing list of homonyms.')
+except flags.DuplicateFlagError:
+    pass
 flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html', 
                     'Where to store the final discrepancy report.')
 flags.DEFINE_bool('only_foreign', False, 
