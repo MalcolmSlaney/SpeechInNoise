@@ -678,8 +678,11 @@ try:
                       'CSV file containing list of homonyms.')
 except flags.DuplicateFlagError:
     pass
-flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html', 
-                    'Where to store the final discrepancy report.')
+try:
+  flags.DEFINE_string('discrepancies', 'asr_audiology_discrepancies.html', 
+                      'Where to store the final discrepancy report.')
+except flags.DuplicateFlagError:
+    pass
 flags.DEFINE_bool('only_foreign', False, 
                   'Whether to only show foreign recognizer results in discrepancies html')
 flags.DEFINE_bool('only_discrepancies', True, 
