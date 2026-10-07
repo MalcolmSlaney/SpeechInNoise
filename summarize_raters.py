@@ -1138,7 +1138,9 @@ def calculate_fraction_true(data_string):
         return 0.0
 
 
-def create_scatter_plot_summary(summary_df: pd, output_file: Optional[str] = None):
+def create_scatter_plot_summary(summary_df: pd.DataFrame, output_file: Optional[str] = None):
+  if summary_df.empty:
+    return
   # Normalize average_matched_word_count by dividing by 5, assuming a max of 5 words per trial
   summary_df['normalized_matched_word_count'] = summary_df['average_matched_word_count'] / 5
 
@@ -1206,7 +1208,11 @@ def create_scatter_plot_summary(summary_df: pd, output_file: Optional[str] = Non
   plt.grid(True, linestyle='--', alpha=0.6)
 
   plt.tight_layout()
-  plt.show()
+  if output_file:
+    plt.savefig(output_file, dpi=150)
+    print(f"Wrote scatter plot to {output_file}")
+  else:
+    plt.show()
 
 def main(argv: List[str]) -> None:
     """Entry point: load data, compute summaries, write CSV and optional plot.
@@ -1273,7 +1279,8 @@ def _run_summary(argv: List[str]) -> None:
     if rows and not FLAGS.no_residual_plot:
         create_residual_plot(rows, homonyms, professional_raters, student_raters)
 
-    create_scatter_plot_summary(dataframe, f'scatter_plot_{FLAGS.asr_model}.png')
+    if summary:
+        create_scatter_plot_summary(pd.DataFrame(summary), f'scatter_plot_{FLAGS.asr_model}.png')
 
 
 if __name__ == "__main__":
