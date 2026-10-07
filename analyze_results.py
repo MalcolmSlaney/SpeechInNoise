@@ -688,8 +688,16 @@ try:
                     'Whether to only show foreign recognizer results in discrepancies html')
 except flags.DuplicateFlagError:
     pass
-flags.DEFINE_bool('only_discrepancies', True, 
-                  'Whether to only show human/machine discrepancies the final html')
+try:
+  flags.DEFINE_bool('only_discrepancies', True, 
+                    'Whether to only show human/machine discrepancies the final html')
+except flags.DuplicateFlagError:
+    pass
+try:
+  flags.DEFINE_bool('only_discrepancies', True, 
+                    'Whether to only show human/machine discrepancies the final html')
+except flags.DuplicateFlagError:
+    pass
 flags.DEFINE_string('subject_filter', 'A\\d+[SP]\\d+', 
                     'Regex to filter which subjects to include in the analysis.')
 flags.DEFINE_integer('debug_count', 0, 
