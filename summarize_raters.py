@@ -42,10 +42,13 @@ from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from absl import app
 from absl import flags
 
+from analyze_results import format_homonyms
 
 FLAGS = flags.FLAGS
 try:
@@ -196,6 +199,14 @@ def read_homonyms(filename: str) -> Dict[str, Set[str]]:
     return homonyms
 
 
+def extract_asr_words_from_row(row:pd.Series) -> List[str]:
+    """
+    Extracts and tokenizes words from the 'text' component of 'audio_asr_data'.
+    """
+    audio_asr_data = row['audio_asr_data']
+    return extract_asr_words(audio_asr_data)
+
+
 def extract_asr_words(asr_data: str) -> List[str]:
     """Extract lowercase words from a JSON-encoded Whisper ASR result.
 
@@ -236,7 +247,7 @@ def extract_asr_model_name(asr_data: str) -> Optional[str]:
         return None
 
 
-def score_trial(answer: str, asr_words: Iterable[str], homonyms: Dict[str, Set[str]]) -> int:
+def XXscore_trial(answer: str, asr_words: Iterable[str], homonyms: Dict[str, Set[str]]) -> int:
     """Count the number of distinct answer items recognized by the ASR.
 
     Each item in ``answer`` is a space-separated token that may contain
@@ -268,6 +279,60 @@ def score_trial(answer: str, asr_words: Iterable[str], homonyms: Dict[str, Set[s
         if candidates.intersection(asr_word_set):
             matched_items.add(item)
     return len(matched_items)
+
+
+def score_trial(row:pd.Series, homonym_dictionary: dict[str, Set[str]]):
+    """
+    Scores a single trial by comparing words/phrases in the 'answer' with the 'text'
+    component of 'audio_asr_data', considering homonyms and '/' separated options.
+
+    Args:
+        row (pd.Series): A row containing 'answer' and 'audio_asr_data'.
+        homonym_dictionary (dict): A dictionary mapping words to their homonym sets.
+
+    Returns:
+        tuple: A tuple containing:
+            - int: The count of unique matched items from the 'answer'.
+            - list: A list of unique matched items from the 'answer' (as they appear,
+                    e.g., 'PEDAL/PETAL' if matched).
+    """
+    answer_raw = str(row['answer']) if pd.notna(row['answer']) else ""
+    asr_word_set = extract_asr_words(row['audio_asr_data'])
+
+    # Split the answer into items, allowing for homonyms separated by '/' and apostrophes.
+    answer_items_raw = re.findall(r"\b[a-zA-Z/0-9']+\b", answer_raw.lower())
+
+    matched_answer_items = set() # Store the original answer item if matched
+
+    for ans_item in answer_items_raw:
+        # If this item has already been matched (e.g., in case of duplicates in answer), skip
+        if ans_item in matched_answer_items:
+            continue
+
+        # Split the item by '/' to get its primary components (e.g., 'pedal/petal' -> ['pedal', 'petal'])
+        components = ans_item.split('/')
+
+        # Collect all possible match candidates for this item (including homonyms for each component)
+        all_candidates_for_item = set()
+        for comp in components:
+            # Always add the component itself (e.g., 'don\'t')
+            all_candidates_for_item.add(comp)
+
+            # Add homonyms for the component (e.g., 'pedal' -> {'pedal', 'petal'})
+            all_candidates_for_item.update(format_homonyms(comp, homonym_dictionary))
+
+            # If the component contains an apostrophe, also add the version without the apostrophe
+            # This helps to catch cases where ASR might omit the apostrophe or homonym list might be canonicalized
+            if "'" in comp:
+                all_candidates_for_item.add(comp.replace("'", ""))
+
+        # Check if any of the candidates for this answer item are in the ASR output
+        for candidate_word in all_candidates_for_item:
+            if candidate_word in asr_word_set:
+                matched_answer_items.add(ans_item)
+                break # Found a match for this item, move to the next answer item
+
+    return len(matched_answer_items), sorted(list(matched_answer_items))
 
 
 def normalize_asr_score(answer: str, matched_words: int) -> float:
@@ -417,11 +482,12 @@ def build_raw_dataframe(rows: Iterable[sqlite3.Row],
         ``audiologist_fraction_correct``, and one ``rater_<username>`` column
         per distinct labeler.
     """
+
     records = []
     for row in rows:
         if extract_asr_model_name(row["audio_asr_data"]) != asr_model:
             continue
-        matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
+        matched, _ = score_trial(row, homonyms)
         records.append(
             {
                 "utterance_id": row["utterance_id"],
@@ -444,6 +510,7 @@ def build_raw_dataframe(rows: Iterable[sqlite3.Row],
                     "asr_fraction_correct", "audiologist_fraction_correct"]
     base = long_df[base_columns].drop_duplicates(subset="utterance_id").set_index("utterance_id")
 
+    # Consolidate all the raters scores into one row per utterance
     rater_pivot = long_df.pivot_table(
         index="utterance_id",
         columns="rater_username",
@@ -481,7 +548,7 @@ def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], per_tr
         for row in rows:
             audio_fraction = fraction_true(row["audio_annotation_data"])
             review_fraction = fraction_true(row["review_annotation_data"])
-            matched_words = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
+            matched_words, _ = score_trial(row, homonyms)
             summary.append(
                 {
                     "user": row["user"],
@@ -499,9 +566,7 @@ def summarize(rows: Iterable[sqlite3.Row], homonyms: Dict[str, Set[str]], per_tr
     # Original aggregation by (user, project, snr)
     groups: Dict[Tuple[Any, str, Any], List[Tuple[float, float, int, float]]] = defaultdict(list)
     for row in rows:
-        matched_words = score_trial(
-            row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms
-        )
+        matched_words, _ = score_trial(row, homonyms)
         groups[(row["user"], row["project"], row["snr"])].append(
             (
                 fraction_true(row["audio_annotation_data"]),
@@ -594,7 +659,7 @@ def print_outlier_details(
     found = 0
     for row in rows:
         asr_words = extract_asr_words(row["audio_asr_data"])
-        matched = score_trial(row["answer"], asr_words, homonyms)
+        matched, _ = score_trial(row, homonyms)
         normalized_asr = normalize_asr_score(row["answer"], matched)
         audio_fraction = fraction_true(row["audio_annotation_data"])
         if normalized_asr <= asr_max and audio_fraction >= audio_min:
@@ -795,7 +860,7 @@ def create_residual_plot(
     for row in rows:
         utterance_key = (row["project"], row["snr"], row["utterance_id"])
         if utterance_key not in asr_scores:
-            matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
+            matched, _ = score_trial(row, homonyms)
             asr_scores[utterance_key] = normalize_asr_score(row["answer"], matched)
         if row["labeler_username"] in valid_raters:
             utterance_rater_scores[utterance_key].append(
@@ -961,7 +1026,7 @@ def create_subject_rater_plot(
 
     for row in rows:
         subject = row["user"]
-        matched = score_trial(row["answer"], extract_asr_words(row["audio_asr_data"]), homonyms)
+        matched, _ = score_trial(row, homonyms)
         asr_scores[subject].append(normalize_asr_score(row["answer"], matched))
         rater_scores[(subject, row["labeler_username"])].append(
             fraction_true(row["review_annotation_data"])
@@ -1058,6 +1123,91 @@ def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
     print(f"Wrote plot to {FLAGS.plot}")
 
 
+def calculate_fraction_true(data_string):
+    if pd.isna(data_string) or data_string == "[]":
+        return 0.0
+    try:
+        # Clean the string and split into individual boolean strings
+        bool_items = [item.strip().lower() for item in data_string.strip('[]').split(',') if item.strip()]
+        if not bool_items:
+            return 0.0
+        # Convert 'true'/'false' strings to actual booleans
+        bool_list = [item == 'true' for item in bool_items]
+        return sum(bool_list) / len(bool_list)
+    except Exception:
+        return 0.0
+
+
+def create_scatter_plot_summary(summary_df: pd, output_file: Optional[str] = None):
+  # Normalize average_matched_word_count by dividing by 5, assuming a max of 5 words per trial
+  summary_df['normalized_matched_word_count'] = summary_df['average_matched_word_count'] / 5
+
+  # plt.figure(figsize=(21, 6)) # Increased figure width to accommodate three plots
+  plt.figure(figsize=(10, 3)) # Increased figure width to accommodate three plots
+
+  # New Plot 2: mean_fraction_audio_annotation_true vs. mean_fraction_review_annotation_true
+  plt.subplot(1, 3, 2) # 1 row, 3 columns, new second plot
+  sns.scatterplot(
+      data=summary_df,
+      x='mean_fraction_audio_annotation_true',
+      y='mean_fraction_review_annotation_true',
+      hue='user', # Differentiate users by color
+      palette='viridis',
+      s=50, # Adjust marker size
+      alpha=0.7,
+      legend=False
+  )
+  plt.title('Mean Audio Annotation vs. Mean Review Annotation')
+  plt.xlabel('Mean Fraction Audio Annotation True')
+  plt.ylabel('Mean Fraction Review Annotation True')
+  plt.title('Fraction Correct')
+  plt.xlabel('Audiologist')
+  plt.ylabel('Reraters')
+  plt.grid(True, linestyle='--', alpha=0.6)
+
+  # Plot 1 (originally Plot 1): normalized_matched_word_count vs. mean_fraction_audio_annotation_true
+  plt.subplot(1, 3, 1) # 1 row, 3 columns, new first plot
+  sns.scatterplot(
+      data=summary_df,
+      x='normalized_matched_word_count',
+      y='mean_fraction_audio_annotation_true',
+      hue='user', # Differentiate users by color
+      palette='viridis',
+      s=50, # Adjust marker size
+      alpha=0.7,
+      legend=False
+  )
+  plt.title('Normalized Matched Words vs. Mean Audio Annotation True Fraction')
+  plt.xlabel('Normalized Matched Word Count (out of 5)')
+  plt.ylabel('Mean Fraction Audio Annotation True')
+  plt.title('Fraction Correct')
+  plt.xlabel('ASR')
+  plt.ylabel('Audiologist')
+  plt.grid(True, linestyle='--', alpha=0.6)
+
+  # Plot 3 (originally Plot 2): normalized_matched_word_count vs. mean_fraction_review_annotation_true
+  plt.subplot(1, 3, 3) # 1 row, 3 columns, third plot
+  sns.scatterplot(
+      data=summary_df,
+      x='normalized_matched_word_count',
+      y='mean_fraction_review_annotation_true',
+      hue='user', # Differentiate users by color
+      palette='viridis',
+      s=50, # Adjust marker size
+      alpha=0.7,
+      legend=False
+  )
+  plt.title('Normalized Matched Words vs. Mean Review Annotation True Fraction')
+  plt.xlabel('Normalized Matched Word Count (out of 5)')
+  plt.ylabel('Mean Fraction Review Annotation True')
+  plt.title('Fraction Correct')
+  plt.xlabel('ASR')
+  plt.ylabel('Reraters')
+  plt.grid(True, linestyle='--', alpha=0.6)
+
+  plt.tight_layout()
+  plt.show()
+
 def main(argv: List[str]) -> None:
     """Entry point: load data, compute summaries, write CSV and optional plot.
 
@@ -1099,6 +1249,7 @@ def _run_summary(argv: List[str]) -> None:
         FLAGS.excluded_subjects,
         allowed_raters,
     )
+
     if FLAGS.dump_raw_data:
         logging.info(f"Fetched {len(rows)} rows before filtering by asr_model={FLAGS.asr_model}")
         dataframe = build_raw_dataframe(rows, homonyms, FLAGS.asr_model)
@@ -1108,6 +1259,7 @@ def _run_summary(argv: List[str]) -> None:
             dataframe.to_pickle(FLAGS.raw_output)
             print(f"Wrote {len(dataframe)} utterance rows to {FLAGS.raw_output}")
             print(dataframe.head())
+
     summary = summarize(rows, homonyms, per_trial=FLAGS.per_trial)
     if FLAGS.show_outliers:
         print_outlier_details(rows, homonyms, FLAGS.outlier_asr_max, FLAGS.outlier_audio_min)
