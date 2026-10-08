@@ -75,8 +75,8 @@ flags.DEFINE_list(
     "Subject usernames to exclude explicitly.",
 )
 flags.DEFINE_string("output_csv", "rater_summary.csv", "CSV file for the summary.")
-flags.DEFINE_string("plot", "rater_summary.png", "PNG file for the optional plot.")
-flags.DEFINE_bool("no_plot", False, "Do not create the summary plot.")
+flags.DEFINE_string("scatter_plot", "rater_scatter_summary.png", "PNG file for the scatter plot.")
+flags.DEFINE_bool("no_scatter_plot", False, "Do not create the scatter plot.")
 flags.DEFINE_bool(
     "per_trial",
     False,
@@ -1078,7 +1078,7 @@ def create_subject_rater_plot(
     print(f"Wrote subject plot to {FLAGS.subject_plot}")
 
 
-def create_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
+def XXcreate_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
     """Create and save the three-panel scatter plot.
 
     The three panels compare: (1) audiologist vs. rerater fractions,
@@ -1272,15 +1272,13 @@ def _run_summary(argv: List[str]) -> None:
     write_csv(summary)
     print_statistics(summary)
     print(f"Wrote summary to {FLAGS.output_csv}")
-    if summary and not FLAGS.no_plot:
-        create_plot(summary, per_trial=FLAGS.per_trial)
+    if summary and not FLAGS.no_scatter_plot:
+        # create_plot(summary, per_trial=FLAGS.per_trial)
+        create_scatter_plot_summary(pd.DataFrame(summary), FLAGS.scatter_plot)
     if rows and not FLAGS.no_subject_plot:
         create_subject_rater_plot(rows, homonyms, professional_raters, student_raters)
     if rows and not FLAGS.no_residual_plot:
         create_residual_plot(rows, homonyms, professional_raters, student_raters)
-
-    if summary:
-        create_scatter_plot_summary(pd.DataFrame(summary), f'scatter_plot_{FLAGS.asr_model}.png')
 
 
 if __name__ == "__main__":
