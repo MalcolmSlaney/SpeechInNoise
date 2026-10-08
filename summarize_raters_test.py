@@ -232,7 +232,7 @@ class SummarizeRatersResidualModeTest(absltest.TestCase):
             "--output_csv", output_csv,
             "--residual_plot", residual_plot,
             "--residual_normalization", residual_normalization,
-            "--no_plot",
+            "--no_scatter_plot",
             "--no_subject_plot",
         ]
 
