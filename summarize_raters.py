@@ -44,6 +44,8 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from scipy.stats import pearsonr
+
 
 from absl import app
 from absl import flags
@@ -1000,8 +1002,7 @@ def create_residual_plot(
 
 
 def create_subject_rater_plot(
-    rows: List[sqlite3.Row],
-    homonyms: Dict[str, Set[str]],
+    dataframe: pd.DataFrame,
     professional_raters: Set[str],
     student_raters: Set[str],
 ) -> None:
@@ -1012,50 +1013,55 @@ def create_subject_rater_plot(
     of words marked correct, color-coded by rater type.
 
     Args:
-        rows: Raw trial rows as returned by :func:`fetch_trials`.
-        homonyms: Bidirectional homonym map as returned by :func:`read_homonyms`.
+        dataframe: Wide per-utterance DataFrame as returned by
+            :func:`build_raw_dataframe`, with a ``subject`` column, an
+            ``asr_fraction_correct`` column, and one ``rater_<username>``
+            column per rater.
         professional_raters: Set of professional rater usernames.
         student_raters: Set of student rater usernames.
     """
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
 
-    # Accumulate per-subject ASR scores and per-(subject, rater) review fractions
-    asr_scores: Dict[Any, List[float]] = defaultdict(list)
-    rater_scores: Dict[Tuple[Any, str], List[float]] = defaultdict(list)
+    if dataframe.empty:
+        return
 
-    for row in rows:
-        subject = row["user"]
-        matched, _ = score_trial(row, homonyms)
-        asr_scores[subject].append(normalize_asr_score(row["answer"], matched))
-        rater_scores[(subject, row["labeler_username"])].append(
-            fraction_true(row["review_annotation_data"])
-        )
+    # Mean ASR score per subject (one value per subject).
+    asr_by_subject = dataframe.groupby("subject")["asr_fraction_correct"].mean()
 
-    subjects = sorted(asr_scores.keys())
+    # Mean fraction correct per (subject, rater); rater columns hold NaN where
+    # a rater did not score that utterance, so mean() skips them.
+    rater_columns = [c for c in dataframe.columns if c.startswith("rater_")]
+    rater_by_subject = dataframe.groupby("subject")[rater_columns].mean()
+
+    subjects = sorted(asr_by_subject.index)
     x_positions = {subject: i for i, subject in enumerate(subjects)}
 
     figure, axis = plt.subplots(figsize=(max(6, len(subjects) * 0.25), 5))
 
     # Plot ASR result per subject as an 'x'
-    for subject, scores in asr_scores.items():
+    for subject in subjects:
         axis.scatter(
-            x_positions[subject], sum(scores) / len(scores),
+            x_positions[subject], asr_by_subject[subject],
             color="steelblue", s=60, zorder=3, alpha=FLAGS.alpha, marker="x",
         )
 
     # Plot one dot per (subject, rater) for professional and student raters only
-    for (subject, rater), scores in rater_scores.items():
+    for column in rater_columns:
+        rater = column[len("rater_"):]
         if rater in professional_raters:
             color = "crimson"
         elif rater in student_raters:
             color = "darkorange"
         else:
             continue
-        axis.scatter(
-            x_positions[subject], sum(scores) / len(scores),
-            color=color, s=30, zorder=2, alpha=FLAGS.alpha,
-        )
+        for subject in subjects:
+            value = rater_by_subject.loc[subject, column]
+            if pd.notna(value):
+                axis.scatter(
+                    x_positions[subject], value,
+                    color=color, s=30, zorder=2, alpha=FLAGS.alpha,
+                )
 
     axis.set_xticks(range(len(subjects)))
     axis.set_xticklabels(
@@ -1076,51 +1082,6 @@ def create_subject_rater_plot(
     figure.tight_layout()
     figure.savefig(FLAGS.subject_plot, dpi=150)
     print(f"Wrote subject plot to {FLAGS.subject_plot}")
-
-
-def XXcreate_plot(summary: List[Dict[str, Any]], per_trial: bool = False) -> None:
-    """Create and save the three-panel scatter plot.
-
-    The three panels compare: (1) audiologist vs. rerater fractions,
-    (2) normalized ASR score vs. audiologist fraction, and (3) normalized ASR
-    score vs. rerater fraction. The plot is saved to the path given by
-    ``--plot``.
-
-    Args:
-        summary: List of summary dicts as returned by :func:`summarize`.
-        per_trial: If ``True``, the aggregation label in each panel title reads
-            "Per Trial"; otherwise "Subject/Project/SNR Aggregates".
-    """
-    import matplotlib.pyplot as plt
-
-    figure, axes = plt.subplots(1, 3, figsize=(12, 4))
-    aggregation_label = "Per Trial" if per_trial else "Subject/Project/SNR Aggregates"
-    rater_label = FLAGS.rater_type.capitalize() + " Reraters"
-
-    scatter_plot(
-        axes[0], summary,
-        "mean_fraction_audio_annotation_true",
-        "mean_fraction_review_annotation_true",
-        "Audiologist", rater_label, marker_size=50, alpha=FLAGS.alpha,
-        title_suffix=aggregation_label,
-    )
-    scatter_plot(
-        axes[1], summary,
-        "normalized_matched_word_count",
-        "mean_fraction_audio_annotation_true",
-        "ASR", "Audiologist", marker_size=50, alpha=FLAGS.alpha,
-        title_suffix=aggregation_label,
-    )
-    scatter_plot(
-        axes[2], summary,
-        "normalized_matched_word_count",
-        "mean_fraction_review_annotation_true",
-        "ASR", rater_label, marker_size=50, alpha=FLAGS.alpha,
-        title_suffix=aggregation_label,
-    )
-    figure.tight_layout()
-    figure.savefig(FLAGS.plot, dpi=150)
-    print(f"Wrote plot to {FLAGS.plot}")
 
 
 def calculate_fraction_true(data_string):
@@ -1214,6 +1175,49 @@ def create_scatter_plot_summary(summary_df: pd.DataFrame, output_file: Optional[
   else:
     plt.show()
 
+
+def print_scatter_summary_stats(summary_df: pd.DataFrame):
+    if len(summary_df) < 2:
+        print("Skipping scatter summary stats: need at least 2 summary rows.")
+        return
+    # Define the variable pairs for each plot
+    plot_vars = {
+        'Plot 1 (ASR vs. Audiologist)': ('normalized_matched_word_count', 'mean_fraction_audio_annotation_true'),
+        'Plot 2 (Audilogist vs. Reraters)': ('mean_fraction_audio_annotation_true', 'mean_fraction_review_annotation_true'),
+        'Plot 3 (ASR vs. Reraters)': ('normalized_matched_word_count', 'mean_fraction_review_annotation_true')
+    }
+
+    results = []
+
+    for plot_name, (x_col, y_col) in plot_vars.items():
+        # Calculate Pearson correlation coefficient
+        correlation, _ = pearsonr(summary_df[x_col], summary_df[y_col])
+
+        # Calculate bias (mean difference: y - x)
+        bias = (summary_df[y_col] - summary_df[x_col]).mean()
+
+        results.append({
+            'Plot': plot_name,
+            'X-Variable': x_col,
+            'Y-Variable': y_col,
+            'Pearson Correlation': correlation,
+            'Bias (Mean Difference Y - X)': bias
+        })
+
+    results_df = pd.DataFrame(results)
+    with pd.option_context('display.max_columns', None, 'display.width', 200):
+      print(results_df)
+
+    # Determine which plot is closest to 1:1
+    # A 1:1 relationship means correlation is close to 1 and bias is close to 0
+    results_df['Distance_to_1_1'] = ((1 - results_df['Pearson Correlation'])**2 + (results_df['Bias (Mean Difference Y - X)'])**2)**0.5
+    closest_plot = results_df.loc[results_df['Distance_to_1_1'].idxmin()]
+
+    print(f"\nThe plot closest to a 1:1 relationship is: {closest_plot['Plot']}")
+    print(f"  Pearson Correlation: {closest_plot['Pearson Correlation']:.3f}")
+    print(f"  Bias (Mean Difference Y - X): {closest_plot['Bias (Mean Difference Y - X)']:.3f}")
+
+
 def main(argv: List[str]) -> None:
     """Entry point: load data, compute summaries, write CSV and optional plot.
 
@@ -1272,13 +1276,16 @@ def _run_summary(argv: List[str]) -> None:
     write_csv(summary)
     print_statistics(summary)
     print(f"Wrote summary to {FLAGS.output_csv}")
+    summary_df = pd.DataFrame(summary)
     if summary and not FLAGS.no_scatter_plot:
         # create_plot(summary, per_trial=FLAGS.per_trial)
-        create_scatter_plot_summary(pd.DataFrame(summary), FLAGS.scatter_plot)
-    if rows and not FLAGS.no_subject_plot:
-        create_subject_rater_plot(rows, homonyms, professional_raters, student_raters)
+        create_scatter_plot_summary(summary_df, FLAGS.scatter_plot)
+    if not FLAGS.no_subject_plot:
+        create_subject_rater_plot(dataframe, professional_raters, student_raters)
     if rows and not FLAGS.no_residual_plot:
         create_residual_plot(rows, homonyms, professional_raters, student_raters)
+
+    print_scatter_summary_stats(summary_df)
 
 
 if __name__ == "__main__":
