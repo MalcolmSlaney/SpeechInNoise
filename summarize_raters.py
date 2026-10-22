@@ -621,20 +621,67 @@ def pearson(x: List[float], y: List[float]) -> float:
     return numerator / denominator if denominator else float("nan")
 
 
-def write_csv(summary: List[Dict[str, Any]]) -> None:
-    """Write summary rows to the CSV file specified by ``--output``.
+def write_csv(
+    summary: List[Dict[str, Any]],
+    rows: List[sqlite3.Row],
+    professional_raters: Set[str],
+    per_trial: bool = False,
+) -> None:
+    """Write summary rows to the CSV file specified by ``--output_csv``.
+
+    In addition to the fields produced by :func:`summarize`, appends one
+    ``rater_<username>`` column per professional rater holding that rater's
+    ``review_annotations`` true fraction. In aggregated mode the value is the
+    mean over the rows in each (user, project, snr) group; in per-trial mode
+    it is the fraction for the individual trial row. The cell is left blank
+    for raters that did not score a given group or trial.
 
     Args:
         summary: List of summary dicts as returned by :func:`summarize`. The
-            field names are taken from the first dict's keys. Does nothing if
-            ``summary`` is empty.
+            field names are taken from the first dict's keys after the rater
+            columns are added. Writes only a header if ``summary`` is empty.
+        rows: Raw trial rows as returned by :func:`fetch_trials`, used to
+            compute the per-rater fractions.
+        professional_raters: Usernames of professional raters to emit columns
+            for.
+        per_trial: ``True`` when ``summary`` was built with per-trial output,
+            so each summary record corresponds to the raw row at the same
+            position.
     """
+    raters = sorted(professional_raters)
+    if summary and raters:
+        if per_trial:
+            # summarize(per_trial=True) emits one record per row, in order.
+            for record, row in zip(summary, rows):
+                labeler = row["labeler_username"]
+                if labeler in professional_raters:
+                    record[f"rater_{labeler}"] = fraction_true(row["review_annotation_data"])
+        else:
+            group_rater_scores: Dict[Tuple[Any, str, Any], Dict[str, List[float]]] = (
+                defaultdict(lambda: defaultdict(list))
+            )
+            for row in rows:
+                labeler = row["labeler_username"]
+                if labeler in professional_raters:
+                    key = (row["user"], row["project"], row["snr"])
+                    group_rater_scores[key][labeler].append(
+                        fraction_true(row["review_annotation_data"])
+                    )
+            for record in summary:
+                key = (record["user"], record["project"], record["snr"])
+                for rater, values in group_rater_scores.get(key, {}).items():
+                    record[f"rater_{rater}"] = sum(values) / len(values)
+        for record in summary:
+            for rater in raters:
+                record.setdefault(f"rater_{rater}", "")
+
     fields = list(summary[0]) if summary else [
         "user", "project", "snr", "records",
         "mean_fraction_audio_annotation_true",
         "mean_fraction_review_annotation_true",
         "average_matched_word_count", "normalized_matched_word_count",
     ]
+    fields += [f"rater_{rater}" for rater in raters if f"rater_{rater}" not in fields]
     with open(FLAGS.output_csv, "w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=fields)
         writer.writeheader()
@@ -1273,7 +1320,7 @@ def _run_summary(argv: List[str]) -> None:
     summary = summarize(rows, homonyms, per_trial=FLAGS.per_trial)
     if FLAGS.show_outliers:
         print_outlier_details(rows, homonyms, FLAGS.outlier_asr_max, FLAGS.outlier_audio_min)
-    write_csv(summary)
+    write_csv(summary, rows, professional_raters, per_trial=FLAGS.per_trial)
     print_statistics(summary)
     print(f"Wrote summary to {FLAGS.output_csv}")
     summary_df = pd.DataFrame(summary)
