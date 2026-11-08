@@ -107,13 +107,13 @@ CREATE UNIQUE INDEX idx_audio_asr_ref ON audio_asr (ref);
  */
 CREATE TABLE audio_annotations (
   ref INTEGER,
-  data TEXT, /* Comma separated list of True/False by audiologist by keyword */
+  data TEXT, /* json separated array of booleans by audiologist by keyword */
   FOREIGN KEY(ref) REFERENCES audio_results(id)
 );
 
 CREATE TABLE review_annotations (
   ref INTEGER,
-  data TEXT,
+  data TEXT,  # a JSON-encoded array of booleans
   labeler INTEGER,
   FOREIGN KEY(ref) REFERENCES audio_results(id),
   FOREIGN KEY(labeler) REFERENCES users(id)

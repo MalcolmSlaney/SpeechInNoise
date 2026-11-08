@@ -30,6 +30,39 @@ Example:
 python3 summarize_raters.py --dbfile experiments_emily.db --project quick
 ```
 
+### Summarize offline ASR and human recognition
+
+After `offline_asr.py` has populated `audio_asr`, run:
+
+```bash
+python3 summarize_asr.py --dbfile experiments_emily.db
+```
+
+The program keeps only the recognized word list from ASR JSON, scores it
+against each trial's answer and `homonym_list.csv`, and includes in-booth
+annotations plus only raters listed in `metadata/professional_raters.txt`.
+It writes per-utterance, project/SNR, subject/project/SNR, and subject SRT CSVs,
+plus a three-panel recognition comparison PNG. Default output filenames use
+`recognition_{test_name}_...`; `test_name` comes from `--project`, a sole project
+found in the data, or `all` when multiple projects are included. Explicit output
+paths remain unchanged. The subject SRT CSV includes
+each professional rater's fitted SRT, their mean SRT (the reference), and
+their standard deviation. It also writes an SRT comparison PNG with rater-SRT
+standard-deviation error bars and a CSV of Bland-Altman bias/limits of agreement
+and ICC(3,1) for in-booth and ASR SRTs versus the professional-rater mean, plus
+`recognition_srt_agreement.txt` explaining the statistics and nominal p-value
+significance. Bias uses a paired t-test; ICC(3,1) uses its F-test against zero.
+The report notes that statistical significance is not the same as clinically
+acceptable agreement, which requires predefined limits.
+It also tests ASR noninferiority against professional-rater leave-one-out
+absolute SRT errors using a one-sided paired t-test; the default 2 dB margin is
+configurable with `--noninferiority_margin_db`. Results are saved to
+`recognition_srt_noninferiority.csv`.
+Use `--project=quick` or `--language=en` to filter the source rows; output paths
+can be changed with `--output_csv`, `--snr_summary_csv`, `--subject_snr_csv`,
+`--srt_csv`, `--scatter_plot`, `--srt_scatter_plot`, `--agreement_csv`, and
+`--noninferiority_csv`.
+
 Deploy server and detach process from the appropriate folder path.
 ```bash
 conda activate quicksin # Or whatever environment you use
