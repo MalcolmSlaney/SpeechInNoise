@@ -156,13 +156,21 @@ def set_username(db):
             lang, trial_number = requested, None
         session["requested"] = json.dumps([lang, trial_number])
     else:
-        # appropriate language depending on project
-        # will need to adjust for mandarin!
-        default_lang = (
-            "sp" if effective_project in (
-                "azbio_spanish", "azbio_spanish_quiet") else "en")
-        session["requested"] = json.dumps([default_lang, None])
+        session["requested"] = json.dumps(
+            [default_language(effective_project), None])
     return json.dumps(APIBlueprint.default_project)
+
+# Language code used in each project's transcript CSV, when the URL gives
+# no ?list=. Projects not listed here are English.
+PROJECT_LANGUAGES = {
+    "azbio_spanish": "es",
+    "azbio_spanish_quiet": "es",
+    "azbio_mandarin": "zh",
+    "azbio_mandarin_quiet": "zh",
+}
+
+def default_language(project):
+    return PROJECT_LANGUAGES.get(project, "en")
 
 def authorized(db):
     return json.dumps(True)
