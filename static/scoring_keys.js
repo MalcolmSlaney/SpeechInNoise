@@ -107,14 +107,21 @@
     if (!anchor) return;
     const help = document.createElement("div");
     help.id = "shortcut-help";
-    help.innerHTML =
-      "<b>Keys</b>: <kbd>1</kbd>–<kbd>9</kbd> <kbd>0</kbd> <kbd>-</kbd> " +
-      "<kbd>=</kbd> flip word &nbsp;·&nbsp; <kbd>A</kbd> all &nbsp;·&nbsp; " +
-      "<kbd>N</kbd> none &nbsp;·&nbsp; <kbd>Space</kbd> play &nbsp;·&nbsp; " +
-      "<kbd>Enter</kbd> next" +
-      (document.getElementById("unclear-checkbox")
-        ? " &nbsp;·&nbsp; <kbd>U</kbd> unclear" : "") +
-      " &nbsp;·&nbsp; <kbd>?</kbd> hide";
+    const items = [
+      ["<kbd>1</kbd>–<kbd>9</kbd> <kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd>",
+       "flip word"],
+      ["<kbd>A</kbd>", "all"],
+      ["<kbd>N</kbd>", "none"],
+      ["<kbd>Space</kbd>", "play"],
+      ["<kbd>Enter</kbd>", "next"],
+    ];
+    if (document.getElementById("unclear-checkbox")) {
+      items.push(["<kbd>U</kbd>", "unclear"]);
+    }
+    items.push(["<kbd>?</kbd>", "hide"]);
+    // Each key stays on one line with its label; whole items wrap.
+    help.innerHTML = "<b>Keys:</b>" + items.map(
+      ([keys, label]) => `<span>${keys} ${label}</span>`).join("");
     anchor.insertAdjacentElement("afterend", help);
   }
 
@@ -138,14 +145,20 @@
       body.shortcuts-hidden .option[data-shortcut]::before { display: none; }
       #shortcut-help {
         order: 2;
-        max-width: 24rem;
-        margin: 0.5em auto;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        margin: 0.5em 0;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.2em 0.9em;
         line-height: 1.6;
         font-family: var(--compact, sans-serif);
         font-size: 0.85rem;
-        text-align: center;
         opacity: 0.8;
       }
+      #shortcut-help > * { white-space: nowrap; }
       body.shortcuts-hidden #shortcut-help { display: none; }
       #shortcut-help kbd {
         border: 1px solid #aaa;
