@@ -64,13 +64,33 @@ SCORE_COLUMNS = [
 
 
 def normalize_word(word: str) -> str:
-    """Normalize a keyword while preserving Unicode letters and compounds."""
+    """Normalize a keyword while preserving Unicode letters and hyphens.
+
+    Args:
+        word: Keyword to normalize.
+
+    Returns:
+        NFKC-normalized, case-folded word without underscores or punctuation
+        other than hyphens.
+    """
     word = unicodedata.normalize("NFKC", word).casefold()
     return re.sub(r"[^\w-]", "", word, flags=re.UNICODE).replace("_", "")
 
 
 def read_homonyms(path: str) -> Dict[str, Set[str]]:
-    """Read comma-separated homonym groups into a bidirectional mapping."""
+    """Read comma-separated homonym groups into a bidirectional mapping.
+
+    Args:
+        path: UTF-8 file containing one comma-separated group per line.
+            Text after ``#`` is ignored.
+
+    Returns:
+        Mapping from each normalized word to the other words in its groups.
+        Returns an empty mapping with a warning if the file is missing.
+
+    Raises:
+        OSError: If the file cannot be read for a reason other than absence.
+    """
     homonyms: Dict[str, Set[str]] = {}
     try:
         with open(path, "r", encoding="utf-8") as file:
@@ -86,7 +106,17 @@ def read_homonyms(path: str) -> Dict[str, Set[str]]:
 
 
 def read_professional_raters(path: str) -> Set[str]:
-    """Read reviewer usernames, ignoring blank lines and comments."""
+    """Read reviewer usernames, ignoring blank lines and comments.
+
+    Args:
+        path: UTF-8 file containing one reviewer username per line.
+
+    Returns:
+        Set of case-folded usernames, excluding comments and blank lines.
+
+    Raises:
+        OSError: If the file cannot be read.
+    """
     raters: Set[str] = set()
     with open(path, "r", encoding="utf-8") as file:
         for line in file:
@@ -97,7 +127,15 @@ def read_professional_raters(path: str) -> Set[str]:
 
 
 def parse_truth_values(value: Any) -> Optional[List[bool]]:
-    """Parse JSON or legacy comma-separated boolean annotation data."""
+    """Parse JSON or legacy comma-separated boolean annotation data.
+
+    Args:
+        value: Annotation list, JSON string, or legacy comma-separated string.
+
+    Returns:
+        List of booleans, or None if the value is missing, is not a list, or
+        contains an unrecognized entry. An empty list remains empty.
+    """
     if value is None or value == "":
         return None
     try:
@@ -121,6 +159,11 @@ def parse_truth_values(value: Any) -> Optional[List[bool]]:
 
 @lru_cache(maxsize=1)
 def _english_normalizer():
+    """Create the cached Whisper English normalizer if it is installed.
+
+    Returns:
+        An EnglishTextNormalizer instance, or None if Whisper is unavailable.
+    """
     try:
         from whisper.normalizers import EnglishTextNormalizer
 
@@ -134,6 +177,14 @@ def normalize_recognition_text(text: str, language: str) -> List[str]:
 
     Non-English test data uses Unicode-aware tokenization without applying an
     English-only normalizer. This keeps accents and non-Latin scripts intact.
+
+    Args:
+        text: Recognized or reference text to tokenize.
+        language: Language code; codes beginning with ``en`` use Whisper's
+            English normalizer when available.
+
+    Returns:
+        List of normalized, nonempty word tokens.
     """
     text = text or ""
     if (language or "").casefold().startswith("en"):
@@ -144,7 +195,16 @@ def normalize_recognition_text(text: str, language: str) -> List[str]:
 
 
 def extract_asr_words(asr_data: Any, language: str) -> List[str]:
-    """Extract only recognized words from offline_asr's JSON result."""
+    """Extract only recognized words from offline_asr's JSON result.
+
+    Args:
+        asr_data: Parsed ASR result or JSON-encoded result.
+        language: Language code used for text normalization.
+
+    Returns:
+        Normalized tokens from segment words, or from the result's text when
+        segment words are unavailable. Invalid JSON or non-dict data gives [].
+    """
     if isinstance(asr_data, str):
         try:
             asr_data = json.loads(asr_data)
@@ -168,6 +228,13 @@ def answer_slots(answer: str, project: str) -> List[str]:
     CNC and WIN trials are single-keyword tests; other projects encode one
     keyword slot per whitespace-delimited answer item. Slash alternatives
     remain within a slot and are expanded during matching.
+
+    Args:
+        answer: Ground-truth answer string.
+        project: Test name, used to identify CNC and WIN.
+
+    Returns:
+        Keyword slots in their original order.
     """
     answer = answer or ""
     if project.casefold() in {"cnc", "win"}:
@@ -178,6 +245,16 @@ def answer_slots(answer: str, project: str) -> List[str]:
 def _candidate_phrases(
     slot: str, language: str, homonyms: Dict[str, Set[str]]
 ) -> Set[Tuple[str, ...]]:
+    """Expand a keyword slot into normalized alternative word sequences.
+
+    Args:
+        slot: Keyword slot, potentially containing slash-separated alternatives.
+        language: Language code used for text normalization.
+        homonyms: Mapping from normalized words to accepted alternatives.
+
+    Returns:
+        Set of candidate word tuples, including homonym expansions.
+    """
     candidates: Set[Tuple[str, ...]] = set()
     for option in slot.split("/"):
         words = normalize_recognition_text(option, language)
@@ -199,7 +276,18 @@ def score_asr_words(
     asr_words: Sequence[str],
     homonyms: Dict[str, Set[str]],
 ) -> List[bool]:
-    """Return one ASR hit/miss value per ground-truth keyword slot."""
+    """Score recognized words against the ground-truth keyword slots.
+
+    Args:
+        answer: Ground-truth answer string.
+        project: Test name determining how the answer is split into slots.
+        language: Language code used to normalize answer alternatives.
+        asr_words: Recognized words to match.
+        homonyms: Mapping from normalized words to accepted alternatives.
+
+    Returns:
+        One boolean hit/miss value for each ground-truth slot.
+    """
     slots = answer_slots(answer, project)
     recognized = {normalize_word(word) for word in asr_words}
     matches = []
@@ -220,6 +308,14 @@ def score_asr_words(
 
 
 def fraction_correct(values: Optional[Sequence[bool]]) -> float:
+    """Calculate the fraction of true annotation values.
+
+    Args:
+        values: Sequence of hit/miss values, or None.
+
+    Returns:
+        Fraction of truthy values, or NaN for a missing or empty sequence.
+    """
     if not values:
         return float("nan")
     return sum(bool(value) for value in values) / len(values)
@@ -232,7 +328,22 @@ def fetch_detail_records(
     project: str = "",
     language: str = "",
 ) -> List[Dict[str, Any]]:
-    """Load result rows and assemble one scored record per in-booth trial."""
+    """Load result rows and assemble one scored record per in-booth trial.
+
+    Args:
+        dbfile: Path to the SQLite experiment database.
+        professional_raters: Case-folded reviewer usernames to include.
+        homonyms: Mapping from normalized words to accepted alternatives.
+        project: Project filter; an empty string includes all projects.
+        language: Language filter; an empty string includes all languages.
+
+    Returns:
+        Scored records for ASR-backed trials, including in-booth scores,
+        recognized words, and individual and mean professional scores.
+
+    Raises:
+        sqlite3.Error: If the database cannot be queried.
+    """
     query = """
         SELECT
             ar.id AS in_booth_id,
@@ -329,7 +440,22 @@ def summarize_database_state(
     project: str = "",
     language: str = "",
 ) -> Dict[str, int]:
-    """Count selected result rows and annotation coverage before scoring."""
+    """Count selected result rows and annotation coverage before scoring.
+
+    Args:
+        dbfile: Path to the SQLite experiment database.
+        professional_raters: Reviewer usernames to include, case-insensitively.
+        project: Project filter; an empty string includes all projects.
+        language: Language filter; an empty string includes all languages.
+
+    Returns:
+        Counts of distinct result, ASR-backed, in-booth-annotated, and
+        professional-annotated utterances, plus ASR-backed utterances missing
+        professional annotation.
+
+    Raises:
+        sqlite3.Error: If the database cannot be queried.
+    """
     query = """
         SELECT
             ar.id AS result_id,
@@ -379,6 +505,16 @@ def summarize_database_state(
 def build_detail_dataframe(
     records: Sequence[Dict[str, Any]], professional_raters: Iterable[str]
 ) -> pd.DataFrame:
+    """Build the per-utterance DataFrame with a stable set of columns.
+
+    Args:
+        records: Scored trial records from ``fetch_detail_records``.
+        professional_raters: Usernames whose individual columns are included.
+
+    Returns:
+        DataFrame with base columns and truth-value and score columns for
+        each configured rater.
+    """
     columns = list(BASE_COLUMNS)
     for rater in sorted(set(professional_raters)):
         columns.extend([f"rater_{rater}_truth_values", f"rater_{rater}_fraction_correct"])
@@ -386,7 +522,14 @@ def build_detail_dataframe(
 
 
 def summarize_by_snr(detail_df: pd.DataFrame) -> pd.DataFrame:
-    """Average the three recognition scores for each project and SNR."""
+    """Average the three recognition scores for each project and SNR.
+
+    Args:
+        detail_df: Per-utterance scores with project, SNR, and in-booth ID.
+
+    Returns:
+        DataFrame of project/SNR groups, utterance counts, and mean scores.
+    """
     columns = ["project", "snr", "utterance_count", *SCORE_COLUMNS]
     if detail_df.empty:
         return pd.DataFrame(columns=columns)
@@ -400,7 +543,17 @@ def summarize_by_snr(detail_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def fit_srt(snrs: Sequence[float], scores: Sequence[float]) -> float:
-    """Fit a two-parameter logistic curve and return its 50% point (x0)."""
+    """Fit a two-parameter logistic curve and return its 50% point.
+
+    Args:
+        snrs: SNR values corresponding to the scores.
+        scores: Fraction-correct values at each SNR.
+
+    Returns:
+        Fitted midpoint in dB. If all finite scores exceed or fall below 0.5,
+        returns the minimum or maximum observed SNR respectively. Returns NaN
+        when the remaining data are insufficient or the fit fails.
+    """
     x = np.asarray(snrs, dtype=float)
     y = np.asarray(scores, dtype=float)
     valid = np.isfinite(x) & np.isfinite(y)
@@ -415,6 +568,16 @@ def fit_srt(snrs: Sequence[float], scores: Sequence[float]) -> float:
         return float("nan")
 
     def logistic(values, steepness, midpoint):
+        """Evaluate the logistic response at the given SNR values.
+
+        Args:
+            values: SNR values at which to evaluate the curve.
+            steepness: Positive logistic slope parameter.
+            midpoint: SNR at which the response is 0.5.
+
+        Returns:
+            Array of predicted fractions correct.
+        """
         return 1.0 / (1.0 + np.exp(np.clip(-steepness * (values - midpoint), -700, 700)))
 
     x_range = float(np.max(x) - np.min(x))
@@ -442,7 +605,16 @@ def fit_srt(snrs: Sequence[float], scores: Sequence[float]) -> float:
 
 
 def summarize_subject_snr(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Build subject/project/SNR means and one logistic SRT row per subject/project."""
+    """Build subject/SNR means and fitted SRTs per subject and project.
+
+    Args:
+        detail_df: Per-utterance scores, including individual rater columns.
+
+    Returns:
+        Tuple containing the subject/project/SNR mean-score DataFrame and
+        the subject/project SRT DataFrame. The latter includes individual
+        professional fits and their mean and sample standard deviation.
+    """
     group_columns = ["subject_id", "subject_username", "project", "snr"]
     subject_columns = [*group_columns, "utterance_count", *SCORE_COLUMNS]
     if detail_df.empty:
@@ -510,7 +682,15 @@ def summarize_subject_snr(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Dat
 
 
 def create_comparison_plot(detail_df: pd.DataFrame, output_path: str) -> None:
-    """Save a row of scatter plots comparing the three recognition sources."""
+    """Save a row of scatter plots comparing the three recognition sources.
+
+    Args:
+        detail_df: Per-utterance in-booth, professional, and ASR scores.
+        output_path: Destination image path accepted by Matplotlib.
+
+    Raises:
+        OSError: If the plot cannot be written.
+    """
     comparisons = [
         ("in_booth_fraction_correct", "professional_fraction_correct", "In-booth vs. Professional"),
         ("in_booth_fraction_correct", "asr_fraction_correct", "In-booth vs. ASR"),
@@ -530,7 +710,15 @@ def create_comparison_plot(detail_df: pd.DataFrame, output_path: str) -> None:
 
 
 def create_srt_comparison_plot(srts_df: pd.DataFrame, output_path: str) -> None:
-    """Plot the three paired SRT comparisons, showing professional-rater SD."""
+    """Plot the three paired SRT comparisons, showing professional-rater SD.
+
+    Args:
+        srts_df: Per-subject/project SRTs and professional-rater sample SDs.
+        output_path: Destination image path accepted by Matplotlib.
+
+    Raises:
+        OSError: If the plot cannot be written.
+    """
     comparisons = [
         ("in_booth_srt", "professional_srt", "In-booth vs. Professional"),
         ("in_booth_srt", "asr_srt", "In-booth vs. ASR"),
@@ -588,13 +776,30 @@ def create_srt_comparison_plot(srts_df: pd.DataFrame, output_path: str) -> None:
 
 
 def srt_differences(srts_df: pd.DataFrame, comparison_column: str) -> pd.Series:
-    """Return finite paired differences, indexed like the input rows."""
+    """Calculate finite paired SRT differences from the professional mean.
+
+    Args:
+        srts_df: Per-subject SRT DataFrame containing ``professional_srt``.
+        comparison_column: Column containing the SRT being compared.
+
+    Returns:
+        Comparison minus professional SRT for finite pairs, preserving the
+        input row indices.
+    """
     valid = np.isfinite(srts_df[comparison_column]) & np.isfinite(srts_df["professional_srt"])
     return srts_df.loc[valid, comparison_column] - srts_df.loc[valid, "professional_srt"]
 
 
 def format_srt_difference_sd_summary(differences: pd.Series) -> str:
-    """Describe subjects outside the sample mean +/- SD and a Gaussian benchmark."""
+    """Describe subjects outside the sample mean +/- SD and a Gaussian benchmark.
+
+    Args:
+        differences: Finite paired SRT differences.
+
+    Returns:
+        Summary of the observed outlier count and theoretical Gaussian
+        expected count. Reports when the SD or benchmark is not estimable.
+    """
     count = len(differences)
     if count < 2:
         return f"Outliers outside mean +/- 1 SD: not estimable (n={count})"
@@ -612,7 +817,11 @@ def format_srt_difference_sd_summary(differences: pd.Series) -> str:
 
 
 def print_srt_difference_sd_summaries(srts_df: pd.DataFrame) -> None:
-    """Print the SD-bound counts for each project and comparison."""
+    """Print the SD-bound counts for each project and comparison.
+
+    Args:
+        srts_df: Per-subject/project in-booth, ASR, and professional SRTs.
+    """
     for project, rows in srts_df.groupby("project", dropna=False, sort=True):
         for column, label in (("in_booth_srt", "In-booth"), ("asr_srt", "ASR")):
             summary = format_srt_difference_sd_summary(srt_differences(rows, column))
@@ -622,7 +831,15 @@ def print_srt_difference_sd_summaries(srts_df: pd.DataFrame) -> None:
 def plot_srt_difference_histogram(
     srts_df: pd.DataFrame, comparison_column: str, title: str, axis, num_bins: int = 10
 ) -> None:
-    """Plot paired SRT differences with subject labels and sample mean +/- SD."""
+    """Plot paired SRT differences with subject labels and sample mean +/- SD.
+
+    Args:
+        srts_df: Per-subject SRTs, usernames, and numeric subject IDs.
+        comparison_column: SRT column to compare with the professional mean.
+        title: Histogram panel title.
+        axis: Matplotlib Axes on which to draw the histogram.
+        num_bins: Number of histogram bins.
+    """
     differences = srt_differences(srts_df, comparison_column)
     valid = srts_df.loc[
         np.isfinite(srts_df[comparison_column]) & np.isfinite(srts_df["professional_srt"])
@@ -670,7 +887,16 @@ def plot_srt_difference_histogram(
 def create_srt_difference_histogram(
     srts_df: pd.DataFrame, output_path: str, num_bins: int = 10
 ) -> None:
-    """Save one row of in-booth and ASR difference histograms per project."""
+    """Save one row of in-booth and ASR difference histograms per project.
+
+    Args:
+        srts_df: Nonempty per-subject/project SRT DataFrame.
+        output_path: Destination image path accepted by Matplotlib.
+        num_bins: Number of bins in each histogram.
+
+    Raises:
+        OSError: If the plot cannot be written.
+    """
     comparisons = [("in_booth_srt", "In-booth"), ("asr_srt", "ASR")]
     projects = list(srts_df.groupby("project", dropna=False, sort=True))
     max_count = 0
@@ -699,6 +925,15 @@ def bland_altman_statistics(reference: Sequence[float], comparison: Sequence[flo
 
     Differences are comparison minus reference. Bias significance is tested
     with a two-sided one-sample t-test against zero.
+
+    Args:
+        reference: Reference SRT values.
+        comparison: Corresponding SRT values from the comparison method.
+
+    Returns:
+        Dictionary containing the number of finite pairs, mean and sample SD
+        of differences, bias confidence interval and p-value, and 95% limits
+        of agreement. Unestimable statistics are NaN.
     """
     paired = pd.DataFrame({"reference": reference, "comparison": comparison}).dropna()
     paired = paired[np.isfinite(paired["reference"]) & np.isfinite(paired["comparison"])]
@@ -727,7 +962,16 @@ def bland_altman_statistics(reference: Sequence[float], comparison: Sequence[flo
 
 
 def icc_3_1_statistics(reference: Sequence[float], comparison: Sequence[float]) -> Dict[str, float]:
-    """Calculate ICC(3,1) and its F-test against zero reliability."""
+    """Calculate ICC(3,1) and its F-test against zero reliability.
+
+    Args:
+        reference: Reference SRT values.
+        comparison: Corresponding SRT values from the comparison method.
+
+    Returns:
+        Dictionary with ``icc_3_1``, ``icc_f_statistic``, and ``icc_p_value``.
+        Unestimable statistics are NaN.
+    """
     paired = pd.DataFrame({"reference": reference, "comparison": comparison}).dropna()
     paired = paired[np.isfinite(paired["reference"]) & np.isfinite(paired["comparison"])]
     values = paired.to_numpy(dtype=float)
@@ -755,12 +999,28 @@ def icc_3_1_statistics(reference: Sequence[float], comparison: Sequence[float]) 
 
 
 def icc_3_1(reference: Sequence[float], comparison: Sequence[float]) -> float:
-    """Return two-way mixed, consistency, single-measure ICC(3,1)."""
+    """Calculate two-way mixed, consistency, single-measure ICC(3,1).
+
+    Args:
+        reference: Reference SRT values.
+        comparison: Corresponding SRT values from the comparison method.
+
+    Returns:
+        ICC(3,1), or NaN if it cannot be estimated.
+    """
     return icc_3_1_statistics(reference, comparison)["icc_3_1"]
 
 
 def summarize_srt_agreement(srts_df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate Bland–Altman and ICC(3,1) against professional-rater consensus."""
+    """Calculate Bland–Altman and ICC(3,1) against professional-rater consensus.
+
+    Args:
+        srts_df: Per-subject/project in-booth, ASR, and professional SRTs.
+
+    Returns:
+        DataFrame with one row per project and comparison, including paired
+        counts, agreement statistics, and associated significance tests.
+    """
     output = []
     comparisons = [("in_booth", "in_booth_srt"), ("asr", "asr_srt")]
     for project, project_rows in srts_df.groupby("project", dropna=False):
@@ -810,6 +1070,15 @@ def summarize_noninferiority(
     is that it is smaller. Noninferiority is declared only when the one-sided
     95% upper t-confidence bound is below the margin. This inference assumes
     independent subjects and approximately normal paired differences.
+
+    Args:
+        srts_df: Per-subject/project SRTs, including JSON-encoded individual
+            professional-rater fits.
+        margin_db: Noninferiority margin for excess mean absolute error in dB.
+
+    Returns:
+        DataFrame with paired-subject counts, error statistics, one-sided
+        test results, and noninferiority decisions for each project.
     """
     output = []
     for project, project_rows in srts_df.groupby("project", dropna=False):
@@ -910,7 +1179,17 @@ def format_srt_agreement_report(
     noninferiority_df: Optional[pd.DataFrame] = None,
     margin_db: float = 2.0,
 ) -> str:
-    """Explain agreement metrics and report their nominal statistical significance."""
+    """Explain agreement metrics and report their nominal statistical significance.
+
+    Args:
+        agreement_df: Agreement statistics from ``summarize_srt_agreement``.
+        alpha: Nominal significance threshold for interpreting p-values.
+        noninferiority_df: Optional results from ``summarize_noninferiority``.
+        margin_db: Noninferiority margin in dB used in the report text.
+
+    Returns:
+        Human-readable, newline-separated report without a trailing newline.
+    """
     lines = [
         "SRT agreement analysis",
         "Reference: mean SRT across professional raters with successful fits.",
@@ -1003,7 +1282,20 @@ def write_srt_agreement_report(
     noninferiority_df: Optional[pd.DataFrame] = None,
     margin_db: float = 2.0,
 ) -> str:
-    """Write and return the human-readable SRT agreement report."""
+    """Write and return the human-readable SRT agreement report.
+
+    Args:
+        agreement_df: Agreement statistics from ``summarize_srt_agreement``.
+        output_path: Destination UTF-8 text file; parent directories are created.
+        noninferiority_df: Optional results from ``summarize_noninferiority``.
+        margin_db: Noninferiority margin in dB used in the report text.
+
+    Returns:
+        Report text without the trailing newline written to the file.
+
+    Raises:
+        OSError: If the directory or report cannot be created or written.
+    """
     report = format_srt_agreement_report(
         agreement_df,
         noninferiority_df=noninferiority_df,
@@ -1017,6 +1309,15 @@ def write_srt_agreement_report(
 
 
 def _write_csv(dataframe: pd.DataFrame, path: str) -> None:
+    """Write a DataFrame without its index and print the number of rows.
+
+    Args:
+        dataframe: Rows to write.
+        path: Destination CSV path; parent directories are created.
+
+    Raises:
+        OSError: If the directory or CSV cannot be created or written.
+    """
     parent = os.path.dirname(os.path.abspath(path))
     os.makedirs(parent, exist_ok=True)
     dataframe.to_csv(path, index=False)
@@ -1024,7 +1325,15 @@ def _write_csv(dataframe: pd.DataFrame, path: str) -> None:
 
 
 def resolve_test_name(project_filter: str, detail_df: pd.DataFrame) -> str:
-    """Choose a filename token from the project filter or sole project present."""
+    """Choose a filename token from the project filter or sole project present.
+
+    Args:
+        project_filter: Explicit project name, or an empty string to infer it.
+        detail_df: Per-utterance DataFrame containing a project column.
+
+    Returns:
+        Sanitized project token, or ``all`` if there is no unique usable name.
+    """
     if project_filter:
         candidate = project_filter
     else:
@@ -1035,7 +1344,15 @@ def resolve_test_name(project_filter: str, detail_df: pd.DataFrame) -> str:
 
 
 def resolve_output_path(path: str, test_name: str) -> str:
-    """Substitute the test token in a default or user-provided output path."""
+    """Substitute the test token in a default or user-provided output path.
+
+    Args:
+        path: Output path, optionally containing ``{test_name}``.
+        test_name: Replacement token.
+
+    Returns:
+        Path with every ``{test_name}`` occurrence replaced.
+    """
     return path.replace("{test_name}", test_name)
 
 
@@ -1044,7 +1361,17 @@ def find_discrepant_utterances(
     professional_raters: Iterable[str],
     tolerance: float = 1e-9,
 ) -> pd.DataFrame:
-    """Select trials where any available in-booth, ASR, or professional score differs."""
+    """Select trials where available in-booth, ASR, or professional scores differ.
+
+    Args:
+        detail_df: Per-utterance DataFrame with available score columns.
+        professional_raters: Reviewer usernames to include, case-insensitively.
+        tolerance: Absolute tolerance for considering two scores equal.
+
+    Returns:
+        Copy of discrepant rows with a ``disagreements`` description column
+        when nonempty. Missing or nonfinite scores are ignored.
+    """
     professional_names = {name.casefold() for name in professional_raters}
     score_columns = [
         ("In-booth", "in_booth_fraction_correct"),
@@ -1083,7 +1410,15 @@ def find_discrepant_utterances(
 
 
 def _format_asr_words(value: Any) -> str:
-    """Format the recognized-word list stored in the detail DataFrame."""
+    """Format the recognized-word list stored in the detail DataFrame.
+
+    Args:
+        value: Word sequence, JSON-encoded list, or other stored value.
+
+    Returns:
+        Space-separated words, an empty string for missing data, or the
+        original/stringified value when it is not a word list.
+    """
     if isinstance(value, (list, tuple, set)):
         return " ".join(str(word) for word in value)
     if value is None or (isinstance(value, float) and math.isnan(value)):
@@ -1104,7 +1439,20 @@ def write_discrepancy_html(
     test_name: str,
     output_path: str,
 ) -> int:
-    """Write escaped discrepancy rows, including recognized ASR words, to HTML."""
+    """Write escaped discrepancy rows, including recognized ASR words, to HTML.
+
+    Args:
+        detail_df: Per-utterance DataFrame with scores and recognized words.
+        professional_raters: Reviewer usernames to include in comparisons.
+        test_name: Test name displayed in the report.
+        output_path: Destination HTML path; parent directories are created.
+
+    Returns:
+        Number of discrepant utterances written.
+
+    Raises:
+        OSError: If the HTML file cannot be created or written.
+    """
     output_path = os.path.abspath(output_path)
     discrepancies = find_discrepant_utterances(detail_df, professional_raters)
     rater_names = {name.casefold() for name in professional_raters}
@@ -1186,6 +1534,12 @@ tr:nth-child(even) {{ background: #f7f9fa; }}
 
 
 def main(argv: List[str]) -> None:
+    """Run the configured ASR scoring, analysis, and report pipeline.
+
+    Args:
+        argv: Remaining command-line arguments supplied by ``absl.app``;
+            ignored because configuration is read from flags.
+    """
     del argv
     logging.info("Reading ASR-backed trials from %s", FLAGS.dbfile)
     homonyms = read_homonyms(FLAGS.homonyms)
