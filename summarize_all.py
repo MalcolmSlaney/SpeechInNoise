@@ -645,7 +645,10 @@ def main(argv: List[str]) -> None:
     if not input_pickles:
         raise ValueError("--input_pickles must specify at least one label:path pair.")
 
-    os.makedirs(FLAGS.output_dir, exist_ok=True)
+    try:
+        os.makedirs(FLAGS.output_dir, exist_ok=True)
+    except OSError as exc:
+        raise OSError(f"Failed to create output directory {os.path.abspath(FLAGS.output_dir)}: {exc}") from exc
 
     all_srts: Dict[str, pd.DataFrame] = {}
     for label, path in input_pickles:

@@ -41,14 +41,34 @@ python3 summarize_asr.py --dbfile experiments_emily.db
 The program keeps only the recognized word list from ASR JSON, scores it
 against each trial's answer and `homonym_list.csv`, and includes in-booth
 annotations plus only raters listed in `metadata/professional_raters.txt`.
+Before scoring, it prints selected result counts and annotation coverage,
+including ASR-backed utterances missing any valid, nonempty professional-rater
+annotation from that configured list.
 It writes per-utterance, project/SNR, subject/project/SNR, and subject SRT CSVs,
-plus a three-panel recognition comparison PNG. Default output filenames use
+plus a three-panel recognition comparison PNG and a disagreement page named
+`recognition_{test_name}_discrepancies.html`. The page lists utterances where
+in-booth, ASR, or a professional rater's fraction-correct score differs, and
+includes the recognized ASR words. Default output filenames use
 `recognition_{test_name}_...`; `test_name` comes from `--project`, a sole project
 found in the data, or `all` when multiple projects are included. Explicit output
 paths remain unchanged. The subject SRT CSV includes
 each professional rater's fitted SRT, their mean SRT (the reference), and
 their standard deviation. It also writes an SRT comparison PNG with rater-SRT
-standard-deviation error bars and a CSV of Bland-Altman bias/limits of agreement
+standard-deviation error bars and `recognition_{test_name}_srt_histogram.png`,
+with in-booth and ASR SRT differences from the professional-rater mean in
+separate panels and one row per project. Each bar lists subject usernames
+(falling back to numeric subject IDs), and the shaded range marks the mean
+paired difference +/- one sample standard deviation across subjects, not the
+uncertainty of an individual fit. The plot and console output call subjects
+strictly outside that range outliers and report their count and the Gaussian
+expected count of approximately 31.7%
+of paired subjects (an expected count, not a rounded prediction). This benchmark
+uses the theoretical normal distribution; the plotted mean and SD are estimated
+from the same sample. The range is omitted when fewer than two paired SRTs are
+available, and the Gaussian benchmark is not applicable when the SD is zero.
+The console counts are also printed with `--no_plot`. Set `--histogram_bins` to
+change the default of 10.
+It also writes a CSV of Bland-Altman bias/limits of agreement
 and ICC(3,1) for in-booth and ASR SRTs versus the professional-rater mean, plus
 `recognition_srt_agreement.txt` explaining the statistics and nominal p-value
 significance. Bias uses a paired t-test; ICC(3,1) uses its F-test against zero.
@@ -60,7 +80,7 @@ configurable with `--noninferiority_margin_db`. Results are saved to
 `recognition_srt_noninferiority.csv`.
 Use `--project=quick` or `--language=en` to filter the source rows; output paths
 can be changed with `--output_csv`, `--snr_summary_csv`, `--subject_snr_csv`,
-`--srt_csv`, `--scatter_plot`, `--srt_scatter_plot`, `--agreement_csv`, and
+`--srt_csv`, `--scatter_plot`, `--srt_scatter_plot`, `--srt_histogram_plot`, `--agreement_csv`, and
 `--noninferiority_csv`.
 
 Deploy server and detach process from the appropriate folder path.

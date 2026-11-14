@@ -3,7 +3,7 @@
 Reads ASR JSON produced by ``offline_asr.py`` and joins it with the trial
 answers, in-booth annotations, and professional review annotations. Writes a
 per-utterance CSV, project/SNR and subject/SNR summaries, subject SRT fits,
-and a three-panel comparison plot.
+comparison plots, agreement reports, and per-utterance discrepancy HTML.
 """
 
 import json
@@ -323,6 +323,59 @@ def fetch_detail_records(
     return records
 
 
+def summarize_database_state(
+    dbfile: str,
+    professional_raters: Set[str],
+    project: str = "",
+    language: str = "",
+) -> Dict[str, int]:
+    """Count selected result rows and annotation coverage before scoring."""
+    query = """
+        SELECT
+            ar.id AS result_id,
+            asr.data AS asr_data,
+            aa.data AS in_booth_data,
+            reviewer.username AS reviewer_username,
+            ra.data AS reviewer_data
+        FROM audio_results ar
+        JOIN audio_trials at ON at.id = ar.trial
+        LEFT JOIN audio_asr asr ON asr.ref = ar.id
+        LEFT JOIN audio_annotations aa ON aa.ref = ar.id
+        LEFT JOIN review_annotations ra ON ra.ref = ar.id
+        LEFT JOIN users reviewer ON reviewer.id = ra.labeler
+        WHERE (? = '' OR at.project = ?)
+          AND (? = '' OR at.lang = ?)
+    """
+    allowed_raters = {username.casefold() for username in professional_raters}
+    all_result_ids: Set[int] = set()
+    asr_result_ids: Set[int] = set()
+    in_booth_result_ids: Set[int] = set()
+    professional_result_ids: Set[int] = set()
+    with closing(sqlite3.connect(dbfile)) as connection:
+        rows = connection.execute(query, (project, project, language, language)).fetchall()
+
+    for result_id, asr_data, in_booth_data, reviewer_username, reviewer_data in rows:
+        all_result_ids.add(result_id)
+        if asr_data:
+            asr_result_ids.add(result_id)
+        if parse_truth_values(in_booth_data):
+            in_booth_result_ids.add(result_id)
+        if (
+            reviewer_username
+            and reviewer_username.casefold() in allowed_raters
+            and parse_truth_values(reviewer_data)
+        ):
+            professional_result_ids.add(result_id)
+
+    return {
+        "result_utterances": len(all_result_ids),
+        "asr_utterances": len(asr_result_ids),
+        "in_booth_utterances": len(in_booth_result_ids),
+        "professional_rater_utterances": len(professional_result_ids),
+        "missing_professional_rater_utterances": len(asr_result_ids - professional_result_ids),
+    }
+
+
 def build_detail_dataframe(
     records: Sequence[Dict[str, Any]], professional_raters: Iterable[str]
 ) -> pd.DataFrame:
@@ -529,6 +582,113 @@ def create_srt_comparison_plot(srts_df: pd.DataFrame, output_path: str) -> None:
     axes[0].set_ylabel("SRT (dB)")
     if len(projects) > 1:
         axes[-1].legend(title="Project", fontsize=8)
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=150)
+    plt.close(figure)
+
+
+def srt_differences(srts_df: pd.DataFrame, comparison_column: str) -> pd.Series:
+    """Return finite paired differences, indexed like the input rows."""
+    valid = np.isfinite(srts_df[comparison_column]) & np.isfinite(srts_df["professional_srt"])
+    return srts_df.loc[valid, comparison_column] - srts_df.loc[valid, "professional_srt"]
+
+
+def format_srt_difference_sd_summary(differences: pd.Series) -> str:
+    """Describe subjects outside the sample mean +/- SD and a Gaussian benchmark."""
+    count = len(differences)
+    if count < 2:
+        return f"Outliers outside mean +/- 1 SD: not estimable (n={count})"
+    mean = float(differences.mean())
+    sd = float(differences.std(ddof=1))
+    outside = int(((differences < mean - sd) | (differences > mean + sd)).sum())
+    if sd == 0:
+        return f"Outliers outside mean +/- 1 SD: {outside}/{count}; Gaussian expected count not applicable (SD=0)"
+    gaussian_fraction = math.erfc(1 / math.sqrt(2))
+    expected = count * gaussian_fraction
+    return (
+        f"Outliers outside mean +/- 1 SD: {outside}/{count}; "
+        f"Gaussian expected count: {expected:.2f} ({100 * gaussian_fraction:.1f}%)"
+    )
+
+
+def print_srt_difference_sd_summaries(srts_df: pd.DataFrame) -> None:
+    """Print the SD-bound counts for each project and comparison."""
+    for project, rows in srts_df.groupby("project", dropna=False, sort=True):
+        for column, label in (("in_booth_srt", "In-booth"), ("asr_srt", "ASR")):
+            summary = format_srt_difference_sd_summary(srt_differences(rows, column))
+            print(f"{label} vs. Professional ({project}): {summary}")
+
+
+def plot_srt_difference_histogram(
+    srts_df: pd.DataFrame, comparison_column: str, title: str, axis, num_bins: int = 10
+) -> None:
+    """Plot paired SRT differences with subject labels and sample mean +/- SD."""
+    differences = srt_differences(srts_df, comparison_column)
+    valid = srts_df.loc[
+        np.isfinite(srts_df[comparison_column]) & np.isfinite(srts_df["professional_srt"])
+    ]
+    axis.set_title(f"{title} (n={len(differences)})")
+    axis.set_xlabel("SRT difference from professional mean (dB)")
+    axis.set_ylabel("Subjects")
+    axis.grid(axis="y", alpha=0.3)
+    if differences.empty:
+        axis.text(0.5, 0.5, "No valid data", ha="center", va="center", transform=axis.transAxes)
+        return
+
+    counts, bins, patches = axis.hist(differences, bins=num_bins, edgecolor="black", alpha=0.7)
+    bin_indices = np.minimum(np.searchsorted(bins, differences, side="right") - 1, len(patches) - 1)
+    labels = valid["subject_username"].where(
+        valid["subject_username"].notna() & valid["subject_username"].astype(str).str.strip().ne(""),
+        valid["subject_id"].astype(str),
+    )
+    for bin_index, patch in enumerate(patches):
+        for position, label in enumerate(labels.iloc[np.flatnonzero(bin_indices == bin_index)]):
+            axis.text(
+                patch.get_x() + patch.get_width() / 2,
+                position + 0.5,
+                str(label),
+                ha="center",
+                va="center",
+                fontsize=7,
+                clip_on=True,
+            )
+    axis.set_ylim(0, max(counts) + 1)
+
+    if len(differences) > 1:
+        mean = float(differences.mean())
+        sd = float(differences.std(ddof=1))
+        axis.axvspan(mean - sd, mean + sd, color="orange", alpha=0.2, label=f"Mean +/- 1 SD ({sd:.2f} dB)")
+        axis.axvline(mean, color="darkorange", linestyle="--", label=f"Mean ({mean:.2f} dB)")
+        axis.legend(
+            fontsize=8, title=format_srt_difference_sd_summary(differences), title_fontsize=8,
+            loc="upper center", bbox_to_anchor=(0.5, -0.18),
+        )
+    else:
+        axis.text(0.02, 0.98, "SD not estimable (n < 2)", transform=axis.transAxes, va="top", fontsize=8)
+
+
+def create_srt_difference_histogram(
+    srts_df: pd.DataFrame, output_path: str, num_bins: int = 10
+) -> None:
+    """Save one row of in-booth and ASR difference histograms per project."""
+    comparisons = [("in_booth_srt", "In-booth"), ("asr_srt", "ASR")]
+    projects = list(srts_df.groupby("project", dropna=False, sort=True))
+    max_count = 0
+    for _, rows in projects:
+        for column, _ in comparisons:
+            values = srt_differences(rows, column)
+            if not values.empty:
+                max_count = max(max_count, int(np.histogram(values, bins=num_bins)[0].max()))
+    row_height = max(6, max_count * 0.2 + 2)
+    figure, axes = plt.subplots(
+        len(projects), len(comparisons), figsize=(15, row_height * len(projects)), squeeze=False
+    )
+    for row_index, (project, rows) in enumerate(projects):
+        for column_index, (column, label) in enumerate(comparisons):
+            plot_srt_difference_histogram(
+                rows, column, f"{label} vs. Professional ({project})",
+                axes[row_index, column_index], num_bins,
+            )
     figure.tight_layout()
     figure.savefig(output_path, dpi=150)
     plt.close(figure)
@@ -879,11 +1039,172 @@ def resolve_output_path(path: str, test_name: str) -> str:
     return path.replace("{test_name}", test_name)
 
 
+def find_discrepant_utterances(
+    detail_df: pd.DataFrame,
+    professional_raters: Iterable[str],
+    tolerance: float = 1e-9,
+) -> pd.DataFrame:
+    """Select trials where any available in-booth, ASR, or professional score differs."""
+    professional_names = {name.casefold() for name in professional_raters}
+    score_columns = [
+        ("In-booth", "in_booth_fraction_correct"),
+        ("ASR", "asr_fraction_correct"),
+    ]
+    for column in detail_df.columns:
+        if not column.startswith("rater_") or not column.endswith("_fraction_correct"):
+            continue
+        rater = column[len("rater_"):-len("_fraction_correct")]
+        if rater.casefold() in professional_names:
+            score_columns.append((f"Professional: {rater}", column))
+    score_columns = [(name, column) for name, column in score_columns if column in detail_df.columns]
+
+    discrepant_indices = []
+    descriptions = {}
+    for index, row in detail_df.iterrows():
+        observed = []
+        for name, column in score_columns:
+            value = pd.to_numeric(pd.Series([row[column]]), errors="coerce").iloc[0]
+            if pd.notna(value) and np.isfinite(value):
+                observed.append((name, float(value)))
+        differences = [
+            f"{left_name} ({left_value:.3f}) vs {right_name} ({right_value:.3f})"
+            for position, (left_name, left_value) in enumerate(observed)
+            for right_name, right_value in observed[position + 1:]
+            if not np.isclose(left_value, right_value, atol=tolerance, rtol=0.0)
+        ]
+        if differences:
+            discrepant_indices.append(index)
+            descriptions[index] = "; ".join(differences)
+
+    discrepant = detail_df.loc[discrepant_indices].copy()
+    if not discrepant.empty:
+        discrepant["disagreements"] = [descriptions[index] for index in discrepant_indices]
+    return discrepant
+
+
+def _format_asr_words(value: Any) -> str:
+    """Format the recognized-word list stored in the detail DataFrame."""
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(str(word) for word in value)
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return ""
+    if isinstance(value, str):
+        try:
+            words = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return value
+        if isinstance(words, list):
+            return " ".join(str(word) for word in words)
+    return str(value)
+
+
+def write_discrepancy_html(
+    detail_df: pd.DataFrame,
+    professional_raters: Iterable[str],
+    test_name: str,
+    output_path: str,
+) -> int:
+    """Write escaped discrepancy rows, including recognized ASR words, to HTML."""
+    output_path = os.path.abspath(output_path)
+    discrepancies = find_discrepant_utterances(detail_df, professional_raters)
+    rater_names = {name.casefold() for name in professional_raters}
+    rater_columns = [
+        column for column in discrepancies.columns
+        if column.startswith("rater_")
+        and column.endswith("_fraction_correct")
+        and column[len("rater_"):-len("_fraction_correct")].casefold() in rater_names
+    ]
+    truth_column = "ground_truth" if "ground_truth" in discrepancies.columns else "answer"
+    preferred_columns = [
+        "subject_username", "in_booth_id", "test_utterance_id", "project", "snr",
+        truth_column, "asr_words", "in_booth_fraction_correct", "asr_fraction_correct",
+        "professional_fraction_correct", *rater_columns, "disagreements",
+    ]
+    columns = list(dict.fromkeys(column for column in preferred_columns if column in discrepancies.columns))
+    display = discrepancies[columns].copy()
+    if "asr_words" in display.columns:
+        display["asr_words"] = display["asr_words"].map(_format_asr_words)
+    display = display.rename(
+        columns={
+            "subject_username": "Subject",
+            "in_booth_id": "In-booth ID",
+            "test_utterance_id": "Test utterance ID",
+            "project": "Test",
+            "snr": "SNR (dB)",
+            "ground_truth": "Ground-truth keywords",
+            "answer": "Ground-truth keywords",
+            "asr_words": "ASR recognized words",
+            "in_booth_fraction_correct": "In-booth fraction correct",
+            "asr_fraction_correct": "ASR fraction correct",
+            "professional_fraction_correct": "Professional mean fraction correct",
+            "disagreements": "Disagreements",
+        }
+    )
+    display = display.rename(
+        columns={
+            column: f"Professional rater: {column[len('rater_'):-len('_fraction_correct')]} fraction correct"
+            for column in rater_columns
+        }
+    )
+    safe_test_name = re.sub(r"[^A-Za-z0-9 _-]", "_", test_name)
+    table_html = (
+        display.to_html(index=False, escape=True, border=0, na_rep="")
+        if not display.empty
+        else "<p>No utterances with differing recognition scores were found.</p>"
+    )
+    page = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{safe_test_name} recognition discrepancies</title>
+<style>
+body {{ font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 1200px; padding: 0 1rem; color: #202124; }}
+h1 {{ font-size: 1.5rem; }}
+table {{ border-collapse: collapse; width: 100%; font-size: .9rem; }}
+th, td {{ border: 1px solid #d5d8dc; padding: .45rem .6rem; text-align: left; vertical-align: top; }}
+th {{ background: #eef2f5; position: sticky; top: 0; }}
+tr:nth-child(even) {{ background: #f7f9fa; }}
+</style>
+</head>
+<body>
+<h1>{safe_test_name}: recognition disagreements</h1>
+<p>{len(display)} utterances have at least one differing in-booth, ASR, or professional-rater fraction-correct score.</p>
+{table_html}
+</body>
+</html>
+"""
+    try:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as file:
+            file.write(page)
+    except OSError as exc:
+        raise OSError(f"Failed to create/write discrepancy HTML at {output_path}: {exc}") from exc
+    if not os.path.isfile(output_path):
+        raise OSError(f"Discrepancy HTML was not created at {output_path}")
+    return len(discrepancies)
+
+
 def main(argv: List[str]) -> None:
     del argv
     logging.info("Reading ASR-backed trials from %s", FLAGS.dbfile)
     homonyms = read_homonyms(FLAGS.homonyms)
     professional_raters = read_professional_raters(FLAGS.professional_raters)
+    database_state = summarize_database_state(
+        FLAGS.dbfile,
+        professional_raters,
+        project=FLAGS.project,
+        language=FLAGS.language,
+    )
+    print(
+        "Database state before scoring: "
+        f"results={database_state['result_utterances']}, "
+        f"with_asr={database_state['asr_utterances']}, "
+        f"with_in_booth_data={database_state['in_booth_utterances']}, "
+        f"with_professional_rater_data={database_state['professional_rater_utterances']}, "
+        "ASR-backed utterances missing professional-rater data="
+        f"{database_state['missing_professional_rater_utterances']}"
+    )
     records = fetch_detail_records(
         FLAGS.dbfile,
         professional_raters,
@@ -902,9 +1223,11 @@ def main(argv: List[str]) -> None:
     srt_csv = resolve_output_path(FLAGS.srt_csv, test_name)
     scatter_plot = resolve_output_path(FLAGS.scatter_plot, test_name)
     srt_scatter_plot = resolve_output_path(FLAGS.srt_scatter_plot, test_name)
+    srt_histogram_plot = resolve_output_path(FLAGS.srt_histogram_plot, test_name)
     agreement_csv = resolve_output_path(FLAGS.agreement_csv, test_name)
     agreement_report_path = resolve_output_path(FLAGS.agreement_report, test_name)
     noninferiority_csv = resolve_output_path(FLAGS.noninferiority_csv, test_name)
+    discrepancy_html = resolve_output_path(FLAGS.discrepancy_html, test_name)
 
     _write_csv(detail_df, output_csv)
     _write_csv(snr_df, snr_summary_csv)
@@ -914,6 +1237,13 @@ def main(argv: List[str]) -> None:
     _write_csv(agreement_df, agreement_csv)
     noninferiority_df = summarize_noninferiority(srt_df, FLAGS.noninferiority_margin_db)
     _write_csv(noninferiority_df, noninferiority_csv)
+    discrepancy_count = write_discrepancy_html(
+        detail_df,
+        professional_raters,
+        test_name,
+        discrepancy_html,
+    )
+    print(f"Wrote {discrepancy_count} discrepant utterances to {discrepancy_html}")
     agreement_report = write_srt_agreement_report(
         agreement_df,
         agreement_report_path,
@@ -922,12 +1252,16 @@ def main(argv: List[str]) -> None:
     )
     print(agreement_report)
     print(f"Wrote agreement explanation to {agreement_report_path}")
+    if not srt_df.empty:
+        print_srt_difference_sd_summaries(srt_df)
     if not FLAGS.no_plot and not detail_df.empty:
         create_comparison_plot(detail_df, scatter_plot)
         print(f"Wrote comparison plot to {scatter_plot}")
     if not FLAGS.no_plot and not srt_df.empty:
         create_srt_comparison_plot(srt_df, srt_scatter_plot)
         print(f"Wrote SRT comparison plot to {srt_scatter_plot}")
+        create_srt_difference_histogram(srt_df, srt_histogram_plot, FLAGS.histogram_bins)
+        print(f"Wrote SRT difference histogram to {srt_histogram_plot}")
 
 
 if __name__ == "__main__":
@@ -946,9 +1280,12 @@ if __name__ == "__main__":
     flags.DEFINE_string("srt_csv", "recognition_{test_name}_srts.csv", "Per-subject/project SRT and score-list CSV output.")
     flags.DEFINE_string("scatter_plot", "recognition_{test_name}_comparison.png", "Three-panel comparison plot output.")
     flags.DEFINE_string("srt_scatter_plot", "recognition_{test_name}_srt_comparison.png", "Three-panel SRT comparison plot output.")
+    flags.DEFINE_string("srt_histogram_plot", "recognition_{test_name}_srt_histogram.png", "SRT difference histogram output.")
+    flags.DEFINE_integer("histogram_bins", 10, "Number of bins for SRT difference histograms.", lower_bound=1)
     flags.DEFINE_string("agreement_csv", "recognition_{test_name}_srt_agreement.csv", "Bland–Altman and ICC(3,1) summary CSV output.")
     flags.DEFINE_string("agreement_report", "recognition_{test_name}_srt_agreement.txt", "Explanation and significance report for SRT agreement statistics.")
     flags.DEFINE_string("noninferiority_csv", "recognition_{test_name}_srt_noninferiority.csv", "ASR noninferiority results CSV output.")
+    flags.DEFINE_string("discrepancy_html", "recognition_{test_name}_discrepancies.html", "Per-utterance recognition disagreement HTML output.")
     flags.DEFINE_float("noninferiority_margin_db", 2.0, "Maximum excess ASR SRT error allowed for noninferiority, in dB.")
-    flags.DEFINE_bool("no_plot", False, "Do not save the comparison plot.")
+    flags.DEFINE_bool("no_plot", False, "Do not save comparison or histogram plots.")
     app.run(main)
