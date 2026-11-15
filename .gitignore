@@ -10,6 +10,7 @@ secret_key_google_text_to_speech
 *.mp3
 *.csv
 *.txt
+!metadata/valid_users.txt
 junk
 *.save
 

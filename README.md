@@ -51,6 +51,21 @@ After `offline_asr.py` has populated `audio_asr`, run:
 python3 summarize_asr.py --dbfile experiments_emily.db
 ```
 
+By default, every summary, plot, and report (including pre-scoring coverage
+counts) is restricted to the explicit study-user allowlist:
+
+```bash
+python3 summarize_asr.py --dbfile experiments_large_prompt.db \
+  --valid_users_file=metadata/valid_users.txt
+```
+
+`metadata/valid_users.txt` lists the 29 usernames from
+`experiments_large_prompt.db` fully matching `A\d+[SP]\d+`, excluding `A2P2`,
+`A2S28`, and `A6S30`. Update this explicit list when eligible users change.
+The file accepts one exact, case-sensitive username per line, ignoring blank
+lines and `#` comments. Missing or empty files are errors. Set
+`--valid_users_file=` to disable username filtering.
+
 The program keeps only the recognized word list from ASR JSON, scores it
 against each trial's answer and `homonym_list.csv`, and includes in-booth
 annotations plus only raters listed in `metadata/professional_raters.txt`.

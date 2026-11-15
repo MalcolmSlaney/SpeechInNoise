@@ -15,6 +15,77 @@ import summarize_asr as sa
 
 class SummarizeAsrTest(absltest.TestCase):
 
+    def test_read_valid_users_preserves_case_and_rejects_empty_files(self):
+        path = os.path.join(self.create_tempdir().full_path, "valid_users.txt")
+        with open(path, "w", encoding="utf-8") as file:
+            file.write("# Valid subjects\n\nA1S1 # included\nA1S1\nA2S2\n")
+        self.assertEqual(sa.read_valid_users(path), {"A1S1", "A2S2"})
+        with open(path, "w", encoding="utf-8") as file:
+            file.write("# No usernames\n\n")
+        with self.assertRaisesRegex(ValueError, "contains no usernames"):
+            sa.read_valid_users(path)
+        with self.assertRaises(OSError):
+            sa.read_valid_users(path + ".missing")
+
+    def test_valid_users_filter_applies_to_scoring_and_coverage(self):
+        db_path = os.path.join(self.create_tempdir().full_path, "valid_users.db")
+        with sqlite3.connect(db_path) as connection:
+            connection.executescript(
+                """
+                CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT);
+                CREATE TABLE audio_trials (
+                    id INTEGER PRIMARY KEY, project TEXT, lang TEXT, snr REAL,
+                    filename TEXT, answer TEXT
+                );
+                CREATE TABLE audio_results (id INTEGER PRIMARY KEY, subject INTEGER, trial INTEGER);
+                CREATE TABLE audio_asr (ref INTEGER, data TEXT);
+                CREATE TABLE audio_annotations (ref INTEGER, data TEXT);
+                CREATE TABLE review_annotations (ref INTEGER, labeler INTEGER, data TEXT);
+                INSERT INTO users VALUES
+                    (1, 'A1S1'), (2, 'A2P2'), (3, 'test'), (4, 'a1s1'),
+                    (10, 'professional');
+                INSERT INTO audio_trials VALUES
+                    (20, 'quick', 'en', 5, 'test.wav', 'cat'),
+                    (21, 'win', 'en', 4, 'test.wav', 'cat'),
+                    (22, 'quick', 'es', 5, 'test.wav', 'cat');
+                INSERT INTO audio_results VALUES
+                    (30, 1, 20), (31, 2, 20), (32, 3, 20), (33, 4, 20),
+                    (34, 1, 21), (35, 1, 22), (36, 1, 20);
+                INSERT INTO audio_asr VALUES
+                    (30, '{"text":"cat"}'), (31, '{"text":"cat"}'),
+                    (32, '{"text":"cat"}'), (33, '{"text":"cat"}'),
+                    (34, '{"text":"cat"}'), (35, '{"text":"cat"}');
+                INSERT INTO audio_annotations VALUES (30, '[true]');
+                INSERT INTO review_annotations VALUES (30, 10, '[true]');
+                """
+            )
+        raters = {"professional"}
+        records = sa.fetch_detail_records(db_path, raters, {})
+        self.assertLen(records, 6)
+        self.assertEqual(sa.summarize_database_state(db_path, raters)["result_utterances"], 7)
+        records = sa.fetch_detail_records(
+            db_path, raters, {}, project="quick", language="en", valid_users={"A1S1"}
+        )
+        self.assertEqual([record["in_booth_id"] for record in records], [30])
+        self.assertEqual(
+            sa.summarize_database_state(
+                db_path, raters, project="quick", language="en", valid_users={"A1S1"}
+            ),
+            {
+                "result_utterances": 2,
+                "asr_utterances": 1,
+                "in_booth_utterances": 1,
+                "professional_rater_utterances": 1,
+                "missing_professional_rater_utterances": 0,
+            },
+        )
+        for usernames in (set(), {"unknown", "' OR 1=1 --"}):
+            self.assertEmpty(sa.fetch_detail_records(db_path, raters, {}, valid_users=usernames))
+            self.assertEqual(
+                sa.summarize_database_state(db_path, raters, valid_users=usernames)["result_utterances"],
+                0,
+            )
+
     def test_output_names_include_resolved_test_name(self):
         one_project = pd.DataFrame({"project": ["quick", "quick"]})
         multiple_projects = pd.DataFrame({"project": ["quick", "win"]})

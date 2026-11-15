@@ -157,6 +157,33 @@ def parse_truth_values(value: Any) -> Optional[List[bool]]:
     return result
 
 
+def read_valid_users(path: str) -> Set[str]:
+    """Read an exact-case subject allowlist, ignoring comments and blank lines."""
+    with open(path, "r", encoding="utf-8") as file:
+        usernames = {
+            username
+            for line in file
+            if (username := line.split("#", 1)[0].strip())
+        }
+    if not usernames:
+        raise ValueError(f"Valid-user file {path} contains no usernames.")
+    return usernames
+
+
+def _valid_user_filter(valid_users: Optional[Set[str]]) -> Tuple[str, Tuple[str, ...]]:
+    """Build a parameterized subject filter shared by counts and scoring."""
+    if valid_users is None:
+        return "", ()
+    if not valid_users:
+        return "AND 0", ()
+    usernames = tuple(sorted(valid_users))
+    placeholders = ", ".join("?" for _ in usernames)
+    return (
+        f"AND ar.subject IN (SELECT id FROM users WHERE username IN ({placeholders}))",
+        usernames,
+    )
+
+
 @lru_cache(maxsize=1)
 def _english_normalizer():
     """Create the cached Whisper English normalizer if it is installed.
@@ -327,6 +354,7 @@ def fetch_detail_records(
     homonyms: Dict[str, Set[str]],
     project: str = "",
     language: str = "",
+    valid_users: Optional[Set[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Load result rows and assemble one scored record per in-booth trial.
 
@@ -336,6 +364,7 @@ def fetch_detail_records(
         homonyms: Mapping from normalized words to accepted alternatives.
         project: Project filter; an empty string includes all projects.
         language: Language filter; an empty string includes all languages.
+        valid_users: Exact subject usernames to include; None includes all.
 
     Returns:
         Scored records for ASR-backed trials, including in-booth scores,
@@ -344,7 +373,8 @@ def fetch_detail_records(
     Raises:
         sqlite3.Error: If the database cannot be queried.
     """
-    query = """
+    subject_filter, subject_parameters = _valid_user_filter(valid_users)
+    query = f"""
         SELECT
             ar.id AS in_booth_id,
             ar.subject AS subject_id,
@@ -370,10 +400,11 @@ def fetch_detail_records(
         WHERE asr.data IS NOT NULL AND asr.data != ''
           AND (? = '' OR at.project = ?)
           AND (? = '' OR at.lang = ?)
+          {subject_filter}
         ORDER BY ar.id, reviewer.username
     """
     with closing(sqlite3.connect(dbfile)) as connection:
-        cursor = connection.execute(query, (project, project, language, language))
+        cursor = connection.execute(query, (project, project, language, language, *subject_parameters))
         columns = [column[0] for column in cursor.description]
         rows = cursor.fetchall()
 
@@ -439,6 +470,7 @@ def summarize_database_state(
     professional_raters: Set[str],
     project: str = "",
     language: str = "",
+    valid_users: Optional[Set[str]] = None,
 ) -> Dict[str, int]:
     """Count selected result rows and annotation coverage before scoring.
 
@@ -447,6 +479,7 @@ def summarize_database_state(
         professional_raters: Reviewer usernames to include, case-insensitively.
         project: Project filter; an empty string includes all projects.
         language: Language filter; an empty string includes all languages.
+        valid_users: Exact subject usernames to include; None includes all.
 
     Returns:
         Counts of distinct result, ASR-backed, in-booth-annotated, and
@@ -456,7 +489,8 @@ def summarize_database_state(
     Raises:
         sqlite3.Error: If the database cannot be queried.
     """
-    query = """
+    subject_filter, subject_parameters = _valid_user_filter(valid_users)
+    query = f"""
         SELECT
             ar.id AS result_id,
             asr.data AS asr_data,
@@ -471,6 +505,7 @@ def summarize_database_state(
         LEFT JOIN users reviewer ON reviewer.id = ra.labeler
         WHERE (? = '' OR at.project = ?)
           AND (? = '' OR at.lang = ?)
+          {subject_filter}
     """
     allowed_raters = {username.casefold() for username in professional_raters}
     all_result_ids: Set[int] = set()
@@ -478,7 +513,7 @@ def summarize_database_state(
     in_booth_result_ids: Set[int] = set()
     professional_result_ids: Set[int] = set()
     with closing(sqlite3.connect(dbfile)) as connection:
-        rows = connection.execute(query, (project, project, language, language)).fetchall()
+        rows = connection.execute(query, (project, project, language, language, *subject_parameters)).fetchall()
 
     for result_id, asr_data, in_booth_data, reviewer_username, reviewer_data in rows:
         all_result_ids.add(result_id)
@@ -1573,11 +1608,13 @@ def main(argv: List[str]) -> None:
     logging.info("Reading ASR-backed trials from %s", FLAGS.dbfile)
     homonyms = read_homonyms(FLAGS.homonyms)
     professional_raters = read_professional_raters(FLAGS.professional_raters)
+    valid_users = read_valid_users(FLAGS.valid_users_file) if FLAGS.valid_users_file else None
     database_state = summarize_database_state(
         FLAGS.dbfile,
         professional_raters,
         project=FLAGS.project,
         language=FLAGS.language,
+        valid_users=valid_users,
     )
     print(
         "Database state before scoring: "
@@ -1594,6 +1631,7 @@ def main(argv: List[str]) -> None:
         homonyms,
         project=FLAGS.project,
         language=FLAGS.language,
+        valid_users=valid_users,
     )
     detail_df = build_detail_dataframe(records, professional_raters)
     test_name = resolve_test_name(FLAGS.project, detail_df)
@@ -1657,6 +1695,11 @@ if __name__ == "__main__":
     )
     flags.DEFINE_string("project", "", "Optional project name to include; empty includes all projects.")
     flags.DEFINE_string("language", "", "Optional language code to include; empty includes all languages.")
+    flags.DEFINE_string(
+        "valid_users_file",
+        "metadata/valid_users.txt",
+        "Optional file of exact subject usernames to include, one per line; empty includes all subjects.",
+    )
     flags.DEFINE_string("output_csv", "recognition_{test_name}_by_utterance.csv", "Per-utterance CSV output.")
     flags.DEFINE_string("snr_summary_csv", "recognition_{test_name}_by_snr.csv", "Project/SNR summary CSV output.")
     flags.DEFINE_string("subject_snr_csv", "recognition_{test_name}_by_subject_snr.csv", "Subject/project/SNR summary CSV output.")
