@@ -57,15 +57,25 @@ their standard deviation. It also writes an SRT comparison PNG with rater-SRT
 standard-deviation error bars and `recognition_{test_name}_srt_histogram.png`,
 with in-booth and ASR SRT differences from the professional-rater mean in
 separate panels and one row per project. Each bar lists subject usernames
-(falling back to numeric subject IDs), and the shaded range marks the mean
-paired difference +/- one sample standard deviation across subjects, not the
-uncertainty of an individual fit. The plot and console output call subjects
-strictly outside that range outliers and report their count and the Gaussian
-expected count of approximately 31.7%
-of paired subjects (an expected count, not a rounded prediction). This benchmark
-uses the theoretical normal distribution; the plotted mean and SD are estimated
-from the same sample. The range is omitted when fewer than two paired SRTs are
-available, and the Gaussian benchmark is not applicable when the SD is zero.
+(falling back to numeric subject IDs). The shaded range is centered on each
+panel's mean paired difference and extends one pooled within-subject
+professional-rater SD in either direction. For each test, the SD pools
+professional-rater deviations from each subject's professional mean, using
+`sqrt(sum((n_i - 1) * s_i**2) / sum(n_i - 1))`, where `n_i` and `s_i`
+are the number of valid professional SRTs and their sample SD for subject `i`.
+Subjects with fewer than two valid professional fits do not contribute to
+this SD; all eligible subjects in the test contribute, even if they lack an
+ASR or in-booth SRT. The same pooled SD is used in both panels. It measures
+professional-rater variability, not the spread of ASR or in-booth differences
+or the uncertainty of an individual fit.
+
+The plot and console output call subjects strictly outside the shaded range
+outliers and report their count and a Gaussian benchmark of approximately
+31.7% of paired subjects. This benchmark assumes the comparison differences
+are normally distributed with SD equal to the pooled professional-rater SD;
+it is not necessarily the expected outlier count for the actual comparison
+distribution. The range is omitted when the pooled SD cannot be estimated,
+and the Gaussian benchmark is not applicable when the SD is zero.
 The console counts are also printed with `--no_plot`. Set `--histogram_bins` to
 change the default of 10.
 It also writes a CSV of Bland-Altman bias/limits of agreement

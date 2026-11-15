@@ -237,12 +237,14 @@ class SummarizeAsrTest(absltest.TestCase):
         sa.create_srt_comparison_plot(srts, plot_path)
         self.assertTrue(os.path.getsize(plot_path) > 0)
 
-    def test_srt_difference_histogram_labels_subjects_and_sample_sd(self):
+    def test_srt_difference_histogram_labels_subjects_and_pooled_rater_sd(self):
         srts = pd.DataFrame(
             {
                 "subject_id": [1, 2, 3, 4, 5],
                 "subject_username": ["A1S1", "A1S2", "A1S3", None, "excluded"],
                 "professional_srt": [10.0, 10.0, 10.0, 10.0, float("nan")],
+                "professional_srt_count": [2, 2, 1, 0, 0],
+                "professional_srt_std": [1.0, 1.0, float("nan"), float("nan"), float("nan")],
                 "asr_srt": [10.0, 11.0, 12.0, 12.0, 14.0],
             }
         )
@@ -254,7 +256,7 @@ class SummarizeAsrTest(absltest.TestCase):
         self.assertEqual([text.get_text() for text in axis.texts], ["A1S1", "A1S2", "A1S3", "4"])
         self.assertIn("n=4", axis.get_title())
         mean = 1.25
-        sd = float(pd.Series([0.0, 1.0, 2.0, 2.0]).std(ddof=1))
+        sd = 1.0
         span = axis.patches[2]
         span_vertices = axis.transData.inverted().transform(span.get_transform().transform(span.get_path().vertices))
         self.assertAlmostEqual(span_vertices[:, 0].min(), mean - sd)
@@ -263,25 +265,45 @@ class SummarizeAsrTest(absltest.TestCase):
         self.assertIn(f"{sd:.2f} dB", axis.get_legend().get_texts()[0].get_text())
         self.assertEqual(
             axis.get_legend().get_title().get_text(),
-            "Outliers outside mean +/- 1 SD: 1/4; Gaussian expected count: 1.27 (31.7%)",
+            "Outliers outside mean +/- 1 rater SD: 1/4; Gaussian benchmark (matched SD): 1.27 (31.7%)",
+        )
+
+    def test_pooled_professional_srt_sd_uses_within_subject_degrees_of_freedom(self):
+        srts = pd.DataFrame(
+            {
+                "professional_srt_count": [3, 2, 1, 0],
+                "professional_srt_std": [1.0, math.sqrt(2.0), float("nan"), float("nan")],
+            }
+        )
+        self.assertAlmostEqual(sa.pooled_professional_srt_sd(srts), math.sqrt(4.0 / 3.0))
+        self.assertTrue(math.isnan(sa.pooled_professional_srt_sd(srts.iloc[2:])))
+        self.assertEqual(
+            sa.pooled_professional_srt_sd(pd.DataFrame(
+                {"professional_srt_count": [2], "professional_srt_std": [0.0]}
+            )),
+            0.0,
         )
 
     def test_srt_difference_sd_summary_boundaries_and_small_samples(self):
         self.assertEqual(
-            sa.format_srt_difference_sd_summary(pd.Series([-1.0, 0.0, 1.0])),
-            "Outliers outside mean +/- 1 SD: 0/3; Gaussian expected count: 0.95 (31.7%)",
+            sa.format_srt_difference_sd_summary(pd.Series([-1.0, 0.0, 1.0]), 1.0),
+            "Outliers outside mean +/- 1 rater SD: 0/3; Gaussian benchmark (matched SD): 0.95 (31.7%)",
         )
         self.assertEqual(
-            sa.format_srt_difference_sd_summary(pd.Series([1.0, 1.0])),
-            "Outliers outside mean +/- 1 SD: 0/2; Gaussian expected count not applicable (SD=0)",
+            sa.format_srt_difference_sd_summary(pd.Series([1.0, 1.0]), 0.0),
+            "Outliers outside mean +/- 1 rater SD: 0/2; Gaussian benchmark not applicable (SD=0)",
         )
         self.assertEqual(
-            sa.format_srt_difference_sd_summary(pd.Series([1.0])),
-            "Outliers outside mean +/- 1 SD: not estimable (n=1)",
+            sa.format_srt_difference_sd_summary(pd.Series([1.0]), float("nan")),
+            "Outliers outside mean +/- 1 rater SD: not estimable (n=1)",
         )
         self.assertEqual(
-            sa.format_srt_difference_sd_summary(pd.Series([], dtype=float)),
-            "Outliers outside mean +/- 1 SD: not estimable (n=0)",
+            sa.format_srt_difference_sd_summary(pd.Series([], dtype=float), 1.0),
+            "Outliers outside mean +/- 1 rater SD: not estimable (n=0)",
+        )
+        self.assertEqual(
+            sa.format_srt_difference_sd_summary(pd.Series([1.0]), 1.0),
+            "Outliers outside mean +/- 1 rater SD: 0/1; Gaussian benchmark (matched SD): 0.32 (31.7%)",
         )
 
     def test_print_srt_difference_sd_summaries_excludes_unpaired_subjects(self):
@@ -289,6 +311,8 @@ class SummarizeAsrTest(absltest.TestCase):
             {
                 "project": ["quick"] * 4,
                 "professional_srt": [0.0, 0.0, 0.0, float("nan")],
+                "professional_srt_count": [2, 2, 2, 0],
+                "professional_srt_std": [1.0, 1.0, 1.0, float("nan")],
                 "in_booth_srt": [-1.0, 0.0, 1.0, 9.0],
                 "asr_srt": [-2.0, 0.0, 1.0, 9.0],
             }
@@ -298,8 +322,9 @@ class SummarizeAsrTest(absltest.TestCase):
         self.assertEqual(
             print_mock.call_args_list,
             [
-                mock.call("In-booth vs. Professional (quick): Outliers outside mean +/- 1 SD: 0/3; Gaussian expected count: 0.95 (31.7%)"),
-                mock.call("ASR vs. Professional (quick): Outliers outside mean +/- 1 SD: 1/3; Gaussian expected count: 0.95 (31.7%)"),
+                mock.call("Professional-rater pooled within-subject SD (quick): 1.00 dB"),
+                mock.call("In-booth vs. Professional (quick): Outliers outside mean +/- 1 rater SD: 0/3; Gaussian benchmark (matched SD): 0.95 (31.7%)"),
+                mock.call("ASR vs. Professional (quick): Outliers outside mean +/- 1 rater SD: 2/3; Gaussian benchmark (matched SD): 0.95 (31.7%)"),
             ],
         )
 
@@ -309,6 +334,8 @@ class SummarizeAsrTest(absltest.TestCase):
                 "subject_id": [1, 2],
                 "subject_username": ["A1S1", "A1S2"],
                 "professional_srt": [1.0, float("nan")],
+                "professional_srt_count": [1, 0],
+                "professional_srt_std": [float("nan"), float("nan")],
                 "in_booth_srt": [2.0, 3.0],
                 "asr_srt": [float("nan"), 4.0],
             }
@@ -317,7 +344,7 @@ class SummarizeAsrTest(absltest.TestCase):
         self.addCleanup(sa.plt.close, figure)
         sa.plot_srt_difference_histogram(srts, "in_booth_srt", "In-booth", axes[0])
         sa.plot_srt_difference_histogram(srts, "asr_srt", "ASR", axes[1])
-        self.assertIn("SD not estimable (n < 2)", [text.get_text() for text in axes[0].texts])
+        self.assertIn("Pooled rater SD not estimable", [text.get_text() for text in axes[0].texts])
         self.assertIn("No valid data", [text.get_text() for text in axes[1].texts])
 
     def test_srt_difference_histogram_saves_separate_project_rows(self):
@@ -327,6 +354,8 @@ class SummarizeAsrTest(absltest.TestCase):
                 "subject_username": ["A1S1", "A1S2"],
                 "project": ["quick", "win"],
                 "professional_srt": [1.0, 2.0],
+                "professional_srt_count": [2, 2],
+                "professional_srt_std": [1.0, 2.0],
                 "in_booth_srt": [2.0, 3.0],
                 "asr_srt": [3.0, 4.0],
             }
@@ -340,6 +369,10 @@ class SummarizeAsrTest(absltest.TestCase):
         self.assertEqual(len(figure.axes), 4)
         self.assertIn("quick", figure.axes[0].get_title())
         self.assertIn("win", figure.axes[2].get_title())
+        self.assertIn("1.00 dB", figure.axes[0].get_legend().get_texts()[0].get_text())
+        self.assertIn("1.00 dB", figure.axes[1].get_legend().get_texts()[0].get_text())
+        self.assertIn("2.00 dB", figure.axes[2].get_legend().get_texts()[0].get_text())
+        self.assertIn("2.00 dB", figure.axes[3].get_legend().get_texts()[0].get_text())
 
     def test_fit_srt_recovers_logistic_midpoint(self):
         snrs = [-10, -5, 0, 5, 10, 15]

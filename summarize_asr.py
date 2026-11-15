@@ -790,29 +790,49 @@ def srt_differences(srts_df: pd.DataFrame, comparison_column: str) -> pd.Series:
     return srts_df.loc[valid, comparison_column] - srts_df.loc[valid, "professional_srt"]
 
 
-def format_srt_difference_sd_summary(differences: pd.Series) -> str:
-    """Describe subjects outside the sample mean +/- SD and a Gaussian benchmark.
+def pooled_professional_srt_sd(srts_df: pd.DataFrame) -> float:
+    """Pool within-subject professional-rater SRT variability.
+
+    Args:
+        srts_df: SRT rows for one project, including each subject's number of
+            valid professional fits and their sample standard deviation.
+
+    Returns:
+        Pooled within-subject sample SD in dB, or NaN if no subject has at
+        least two valid professional-rater fits.
+    """
+    counts = srts_df["professional_srt_count"]
+    stds = srts_df["professional_srt_std"]
+    valid = (counts >= 2) & np.isfinite(stds)
+    degrees = counts[valid] - 1
+    if degrees.empty:
+        return float("nan")
+    return float(np.sqrt((degrees * stds[valid] ** 2).sum() / degrees.sum()))
+
+
+def format_srt_difference_sd_summary(differences: pd.Series, rater_sd: float) -> str:
+    """Describe outliers relative to pooled professional-rater variability.
 
     Args:
         differences: Finite paired SRT differences.
+        rater_sd: Pooled within-subject professional-rater SD in dB.
 
     Returns:
-        Summary of the observed outlier count and theoretical Gaussian
-        expected count. Reports when the SD or benchmark is not estimable.
+        Observed outlier count and a Gaussian benchmark conditional on the
+        comparison differences having this SD. Reports unestimable results.
     """
     count = len(differences)
-    if count < 2:
-        return f"Outliers outside mean +/- 1 SD: not estimable (n={count})"
+    if not count or not math.isfinite(rater_sd):
+        return f"Outliers outside mean +/- 1 rater SD: not estimable (n={count})"
     mean = float(differences.mean())
-    sd = float(differences.std(ddof=1))
-    outside = int(((differences < mean - sd) | (differences > mean + sd)).sum())
-    if sd == 0:
-        return f"Outliers outside mean +/- 1 SD: {outside}/{count}; Gaussian expected count not applicable (SD=0)"
+    outside = int(((differences < mean - rater_sd) | (differences > mean + rater_sd)).sum())
+    if rater_sd == 0:
+        return f"Outliers outside mean +/- 1 rater SD: {outside}/{count}; Gaussian benchmark not applicable (SD=0)"
     gaussian_fraction = math.erfc(1 / math.sqrt(2))
     expected = count * gaussian_fraction
     return (
-        f"Outliers outside mean +/- 1 SD: {outside}/{count}; "
-        f"Gaussian expected count: {expected:.2f} ({100 * gaussian_fraction:.1f}%)"
+        f"Outliers outside mean +/- 1 rater SD: {outside}/{count}; "
+        f"Gaussian benchmark (matched SD): {expected:.2f} ({100 * gaussian_fraction:.1f}%)"
     )
 
 
@@ -820,21 +840,24 @@ def print_srt_difference_sd_summaries(srts_df: pd.DataFrame) -> None:
     """Print the SD-bound counts for each project and comparison.
 
     Args:
-        srts_df: Per-subject/project in-booth, ASR, and professional SRTs.
+        srts_df: Per-subject/project SRTs and professional-rater counts and SDs.
     """
     for project, rows in srts_df.groupby("project", dropna=False, sort=True):
+        rater_sd = pooled_professional_srt_sd(rows)
+        sd_text = f"{rater_sd:.2f} dB" if math.isfinite(rater_sd) else "not estimable"
+        print(f"Professional-rater pooled within-subject SD ({project}): {sd_text}")
         for column, label in (("in_booth_srt", "In-booth"), ("asr_srt", "ASR")):
-            summary = format_srt_difference_sd_summary(srt_differences(rows, column))
+            summary = format_srt_difference_sd_summary(srt_differences(rows, column), rater_sd)
             print(f"{label} vs. Professional ({project}): {summary}")
 
 
 def plot_srt_difference_histogram(
     srts_df: pd.DataFrame, comparison_column: str, title: str, axis, num_bins: int = 10
 ) -> None:
-    """Plot paired SRT differences with subject labels and sample mean +/- SD.
+    """Plot paired SRT differences with pooled professional-rater SD bounds.
 
     Args:
-        srts_df: Per-subject SRTs, usernames, and numeric subject IDs.
+        srts_df: One project's SRTs, subject IDs, and professional-rater SDs.
         comparison_column: SRT column to compare with the professional mean.
         title: Histogram panel title.
         axis: Matplotlib Axes on which to draw the histogram.
@@ -871,17 +894,23 @@ def plot_srt_difference_histogram(
             )
     axis.set_ylim(0, max(counts) + 1)
 
-    if len(differences) > 1:
+    rater_sd = pooled_professional_srt_sd(srts_df)
+    if math.isfinite(rater_sd):
         mean = float(differences.mean())
-        sd = float(differences.std(ddof=1))
-        axis.axvspan(mean - sd, mean + sd, color="orange", alpha=0.2, label=f"Mean +/- 1 SD ({sd:.2f} dB)")
+        axis.axvspan(
+            mean - rater_sd, mean + rater_sd, color="orange", alpha=0.2,
+            label=f"Mean +/- 1 pooled rater SD ({rater_sd:.2f} dB)",
+        )
         axis.axvline(mean, color="darkorange", linestyle="--", label=f"Mean ({mean:.2f} dB)")
         axis.legend(
-            fontsize=8, title=format_srt_difference_sd_summary(differences), title_fontsize=8,
+            fontsize=8, title=format_srt_difference_sd_summary(differences, rater_sd), title_fontsize=8,
             loc="upper center", bbox_to_anchor=(0.5, -0.18),
         )
     else:
-        axis.text(0.02, 0.98, "SD not estimable (n < 2)", transform=axis.transAxes, va="top", fontsize=8)
+        axis.text(
+            0.02, 0.98, "Pooled rater SD not estimable",
+            transform=axis.transAxes, va="top", fontsize=8,
+        )
 
 
 def create_srt_difference_histogram(
