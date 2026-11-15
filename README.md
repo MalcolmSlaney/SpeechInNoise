@@ -1,5 +1,18 @@
 ## Useful commands
 
+### Database completeness
+
+```bash
+python3 database_completeness.py experiments_emily.db
+```
+
+Prints one line with counts and percentages of all recorded utterances
+(`audio_results`) having at least one nonempty ASR result and having a nonempty
+annotation from every rater in `metadata/professional_raters.txt`. These are
+independent fractions; duplicate ASR or annotation rows do not inflate counts.
+This checks stored-data presence, not JSON validity or recognition accuracy.
+The database is opened read-only; an empty database reports `N/A` percentages.
+
 ### Summarize rater scores
 
 `summarize_raters.py` reads `audio_results`, `audio_trials`, `audio_asr`,
