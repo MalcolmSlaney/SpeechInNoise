@@ -144,8 +144,9 @@ class CompareAsrModelsTest(unittest.TestCase):
             axis = figure.axes[0]
             self.assertEqual(
                 [tick.get_text() for tick in axis.get_xticklabels()],
-                ["", "second", "", "", "first", ""],
+                ["second", "first"],
             )
+            np.testing.assert_array_equal(axis.get_xticks(), [0, 1])
             for line, (project, comparison_name) in zip(
                 axis.lines,
                 [("quick", "Audiologist"), ("quick", "ASR"), ("win", "Audiologist"), ("win", "ASR")],
@@ -156,6 +157,9 @@ class CompareAsrModelsTest(unittest.TestCase):
                 np.testing.assert_allclose(
                     line.get_ydata(),
                     [np.nan, values["second"], np.nan, np.nan, values["first"], np.nan],
+                )
+                np.testing.assert_allclose(
+                    line.get_xdata(), [np.nan, 0, np.nan, np.nan, 1, np.nan]
                 )
                 self.assertEqual(line.get_marker(), "o")
                 # NaN slots produce distinct paths, not a connection across the gap.

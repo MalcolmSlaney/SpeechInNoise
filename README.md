@@ -145,8 +145,9 @@ work equally well. Do not supply overlapping subject/project rows for a
 model. Only projects `quick` and `win` are plotted.
 
 Use `--model_order="tiny.en,large,,large_prompt"` to override the plot order.
-List every input model exactly once. Empty comma-delimited slots add blank
-positions and break the lines between model groups in both plots. Whitespace
+List every input model exactly once. Empty comma-delimited slots break the
+lines between model groups in both plots without consuming x-axis positions;
+consecutive models always remain one position apart. Whitespace
 around names is ignored; unknown, omitted, or repeated model names are errors.
 Markers keep isolated model results visible. The default order is:
 

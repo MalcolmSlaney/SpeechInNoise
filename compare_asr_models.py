@@ -99,7 +99,10 @@ def plot_comparisons(
                 f"unknown models: {sorted(unknown)}; missing models: {sorted(missing)}"
             )
         models = list(model_order)
-    x = np.arange(len(models))
+    labels = [name for name in models if name]
+    ticks = np.arange(len(labels))
+    positions = iter(ticks)
+    x = [next(positions) if name else np.nan for name in models]
     output_dir.mkdir(parents=True, exist_ok=True)
     paths = (
         output_dir / "model_comparison_outliers.png",
@@ -110,14 +113,14 @@ def plot_comparisons(
         ("difference_sd_db", "Standard Deviation of Differences (dB)"),
     )
     for (metric, ylabel), path in zip(metrics, paths):
-        figure, axis = plt.subplots(figsize=(max(8, len(models) * 0.6), 4))
+        figure, axis = plt.subplots(figsize=(max(8, len(labels) * 0.6), 4))
         for project, project_label in PROJECTS:
             for _, comparison in COMPARISONS:
                 values = summary.loc[
                     (summary["project"] == project) & (summary["comparison"] == comparison)
                 ].set_index("model")[metric].reindex(models)
                 axis.plot(x, values, marker="o", label=f"{project_label} {comparison}")
-        axis.set_xticks(x, models, rotation=45, ha="right")
+        axis.set_xticks(ticks, labels, rotation=45, ha="right")
         axis.set(title="Model Comparison", xlabel="Model", ylabel=ylabel)
         axis.grid(True)
         axis.legend()
