@@ -1407,17 +1407,18 @@ def resolve_test_name(project_filter: str, detail_df: pd.DataFrame) -> str:
     return safe_name or "all"
 
 
-def resolve_output_path(path: str, test_name: str) -> str:
-    """Substitute the test token in a default or user-provided output path.
+def resolve_output_path(path: str, test_name: str, output_dir: str = "") -> str:
+    """Substitute the test token and put relative paths under output_dir.
 
     Args:
         path: Output path, optionally containing ``{test_name}``.
         test_name: Replacement token.
+        output_dir: Directory prepended to relative output paths.
 
     Returns:
-        Path with every ``{test_name}`` occurrence replaced.
+        Resolved output path; absolute paths ignore output_dir.
     """
-    return path.replace("{test_name}", test_name)
+    return os.path.join(output_dir, path.replace("{test_name}", test_name))
 
 
 def find_discrepant_utterances(
@@ -1638,17 +1639,21 @@ def main(argv: List[str]) -> None:
     snr_df = summarize_by_snr(detail_df)
     subject_snr_df, srt_df = summarize_subject_snr(detail_df)
 
-    output_csv = resolve_output_path(FLAGS.output_csv, test_name)
-    snr_summary_csv = resolve_output_path(FLAGS.snr_summary_csv, test_name)
-    subject_snr_csv = resolve_output_path(FLAGS.subject_snr_csv, test_name)
-    srt_csv = resolve_output_path(FLAGS.srt_csv, test_name)
-    scatter_plot = resolve_output_path(FLAGS.scatter_plot, test_name)
-    srt_scatter_plot = resolve_output_path(FLAGS.srt_scatter_plot, test_name)
-    srt_histogram_plot = resolve_output_path(FLAGS.srt_histogram_plot, test_name)
-    agreement_csv = resolve_output_path(FLAGS.agreement_csv, test_name)
-    agreement_report_path = resolve_output_path(FLAGS.agreement_report, test_name)
-    noninferiority_csv = resolve_output_path(FLAGS.noninferiority_csv, test_name)
-    discrepancy_html = resolve_output_path(FLAGS.discrepancy_html, test_name)
+    output_csv = resolve_output_path(FLAGS.output_csv, test_name, FLAGS.output_dir)
+    snr_summary_csv = resolve_output_path(FLAGS.snr_summary_csv, test_name, FLAGS.output_dir)
+    subject_snr_csv = resolve_output_path(FLAGS.subject_snr_csv, test_name, FLAGS.output_dir)
+    srt_csv = resolve_output_path(FLAGS.srt_csv, test_name, FLAGS.output_dir)
+    scatter_plot = resolve_output_path(FLAGS.scatter_plot, test_name, FLAGS.output_dir)
+    srt_scatter_plot = resolve_output_path(FLAGS.srt_scatter_plot, test_name, FLAGS.output_dir)
+    srt_histogram_plot = resolve_output_path(FLAGS.srt_histogram_plot, test_name, FLAGS.output_dir)
+    agreement_csv = resolve_output_path(FLAGS.agreement_csv, test_name, FLAGS.output_dir)
+    agreement_report_path = resolve_output_path(FLAGS.agreement_report, test_name, FLAGS.output_dir)
+    noninferiority_csv = resolve_output_path(FLAGS.noninferiority_csv, test_name, FLAGS.output_dir)
+    discrepancy_html = resolve_output_path(FLAGS.discrepancy_html, test_name, FLAGS.output_dir)
+
+    if not FLAGS.no_plot:
+        for path in (scatter_plot, srt_scatter_plot, srt_histogram_plot):
+            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
 
     _write_csv(detail_df, output_csv)
     _write_csv(snr_df, snr_summary_csv)
@@ -1695,6 +1700,9 @@ if __name__ == "__main__":
     )
     flags.DEFINE_string("project", "", "Optional project name to include; empty includes all projects.")
     flags.DEFINE_string("language", "", "Optional language code to include; empty includes all languages.")
+    flags.DEFINE_string(
+        "output_dir", ".", "Directory for relative output filenames; absolute filenames are unchanged."
+    )
     flags.DEFINE_string(
         "valid_users_file",
         "metadata/valid_users.txt",

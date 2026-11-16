@@ -99,6 +99,20 @@ class SummarizeAsrTest(absltest.TestCase):
         )
         self.assertEqual(sa.resolve_output_path("custom/results.csv", "quick"), "custom/results.csv")
 
+    def test_output_directory_applies_only_to_relative_paths(self):
+        self.assertEqual(
+            sa.resolve_output_path("recognition_{test_name}_srts.csv", "quick", "results/large"),
+            "results/large/recognition_quick_srts.csv",
+        )
+        self.assertEqual(
+            sa.resolve_output_path("nested/report.txt", "quick", "results"),
+            "results/nested/report.txt",
+        )
+        self.assertEqual(
+            sa.resolve_output_path("/tmp/recognition_{test_name}.csv", "win", "results"),
+            "/tmp/recognition_win.csv",
+        )
+
     def test_discrepancy_html_lists_differing_sources_and_asr_words(self):
         dataframe = pd.DataFrame(
             [

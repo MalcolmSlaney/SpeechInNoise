@@ -79,7 +79,11 @@ in-booth, ASR, or a professional rater's fraction-correct score differs, and
 includes the recognized ASR words. Default output filenames use
 `recognition_{test_name}_...`; `test_name` comes from `--project`, a sole project
 found in the data, or `all` when multiple projects are included. Explicit output
-paths remain unchanged. The subject SRT CSV includes
+relative paths are placed under `--output_dir` (default `.`), while absolute
+paths starting with `/` remain unchanged. Output directories are created as
+needed. For example, `--output_dir=results/large` keeps that model's CSVs,
+plots, text report, and HTML together. Input paths are unaffected.
+The subject SRT CSV includes
 each professional rater's fitted SRT, their mean SRT (the reference), and
 their standard deviation. It also writes an SRT comparison PNG with rater-SRT
 standard-deviation error bars and `recognition_{test_name}_srt_histogram.png`,
