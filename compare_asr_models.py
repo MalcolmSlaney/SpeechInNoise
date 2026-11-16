@@ -16,6 +16,12 @@ import pandas as pd
 
 COMPARISONS = (("in_booth_srt", "Audiologist"), ("asr_srt", "ASR"))
 PROJECTS = (("quick", "Quick"), ("win", "WIN"))
+DEFAULT_MODEL_ORDER = (
+    "tiny.en,tiny,base.en,base,small.en,small,medium.en,medium,large,,"
+    "large_prime,large_prompt,,"
+    "large_forced_-10,large_forced_0,large_forced_10,large_forced_20,large_forced_100,,"
+    "large_exact_-10,large_exact_0,large_exact_10,large_exact_20,large_exact_100"
+)
 SUMMARY_COLUMNS = [
     "model", "project", "comparison", "n", "outlier_count", "difference_sd_db",
 ]
@@ -76,10 +82,23 @@ def summarize_model(model: str, paths: Sequence[Path], threshold: float = 2.0) -
 
 
 def plot_comparisons(
-    summary: pd.DataFrame, output_dir: Path, threshold: float = 2.0
+    summary: pd.DataFrame, output_dir: Path, threshold: float = 2.0,
+    model_order: Optional[Sequence[str]] = None,
 ) -> Tuple[Path, Path]:
     """Write the two four-series plots, retaining the supplied model order."""
     models = summary["model"].drop_duplicates().tolist()
+    if model_order is not None:
+        ordered = [name for name in model_order if name]
+        if len(ordered) != len(set(ordered)):
+            raise ValueError("--model_order must not repeat model names.")
+        unknown = set(ordered) - set(models)
+        missing = set(models) - set(ordered)
+        if unknown or missing:
+            raise ValueError(
+                "--model_order must list every input model exactly once; "
+                f"unknown models: {sorted(unknown)}; missing models: {sorted(missing)}"
+            )
+        models = list(model_order)
     x = np.arange(len(models))
     output_dir.mkdir(parents=True, exist_ok=True)
     paths = (
@@ -97,7 +116,7 @@ def plot_comparisons(
                 values = summary.loc[
                     (summary["project"] == project) & (summary["comparison"] == comparison)
                 ].set_index("model")[metric].reindex(models)
-                axis.plot(x, values, label=f"{project_label} {comparison}")
+                axis.plot(x, values, marker="o", label=f"{project_label} {comparison}")
         axis.set_xticks(x, models, rotation=45, ha="right")
         axis.set(title="Model Comparison", xlabel="Model", ylabel=ylabel)
         axis.grid(True)
@@ -115,6 +134,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         help="Model label followed by one or more subject-SRT CSVs; repeat in plot order.",
     )
     parser.add_argument("--output_dir", type=Path, default=Path("."))
+    parser.add_argument(
+        "--model_order",
+        default=DEFAULT_MODEL_ORDER,
+        help=(
+            "Comma-delimited model labels; empty entries create line breaks. "
+            "The default skips models without inputs. Set to empty to use input order."
+        ),
+    )
     parser.add_argument("--outlier_threshold", type=float, default=2.0, help="Absolute SRT error in dB.")
     args = parser.parse_args(argv)
     if not math.isfinite(args.outlier_threshold) or args.outlier_threshold < 0:
@@ -139,7 +166,17 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                     "%s/%s: paired subject counts differ across models; inspect the summary CSV.",
                     project, comparison,
                 )
-        plot_paths = plot_comparisons(summary, args.output_dir, args.outlier_threshold)
+        model_order = (
+            [name.strip() for name in args.model_order.split(",")]
+            if args.model_order else None
+        )
+        if args.model_order == DEFAULT_MODEL_ORDER:
+            model_order = [
+                name for name in DEFAULT_MODEL_ORDER.split(",") if not name or name in inputs
+            ]
+        plot_paths = plot_comparisons(
+            summary, args.output_dir, args.outlier_threshold, model_order=model_order
+        )
         summary_path = args.output_dir / "model_comparison_summary.csv"
         summary.to_csv(summary_path, index=False)
     except (OSError, ValueError) as error:

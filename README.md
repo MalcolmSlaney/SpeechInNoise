@@ -139,10 +139,25 @@ python3 compare_asr_models.py \
   --output_dir model_comparison
 ```
 
-Each `--model` takes a label and one or more subject-SRT CSVs, in plotting
-order. A combined `recognition_all_srts.csv` or separate QuickSIN/WIN CSVs
+Each `--model` takes a label and one or more subject-SRT CSVs.
+A combined `recognition_all_srts.csv` or separate QuickSIN/WIN CSVs
 work equally well. Do not supply overlapping subject/project rows for a
 model. Only projects `quick` and `win` are plotted.
+
+Use `--model_order="tiny.en,large,,large_prompt"` to override the plot order.
+List every input model exactly once. Empty comma-delimited slots add blank
+positions and break the lines between model groups in both plots. Whitespace
+around names is ignored; unknown, omitted, or repeated model names are errors.
+Markers keep isolated model results visible. The default order is:
+
+```text
+tiny.en,tiny,base.en,base,small.en,small,medium.en,medium,large,,large_prime,large_prompt,,large_forced_-10,large_forced_0,large_forced_10,large_forced_20,large_forced_100,,large_exact_-10,large_exact_0,large_exact_10,large_exact_20,large_exact_100
+```
+
+The default skips model names without input CSVs, preserving the group
+separators. Input models not in the default require an explicit order.
+Set `--model_order=` to use the `--model` input order instead.
+The summary CSV remains in input order, without separator rows.
 
 The outputs are `model_comparison_outliers.png`,
 `model_comparison_stds.png`, and `model_comparison_summary.csv`. Both plots

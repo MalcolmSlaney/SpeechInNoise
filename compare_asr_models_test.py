@@ -121,6 +121,99 @@ class CompareAsrModelsTest(unittest.TestCase):
             comparison.main(["--model", "same", str(self.path), "--model", "same", str(self.path)])
         self.assertEqual(error.exception.code, 2)
 
+    def test_model_order_reorders_values_and_breaks_both_plots(self):
+        summary = pd.concat([
+            comparison.summarize_model("first", [self.path]),
+            comparison.summarize_model("second", [self.path]),
+        ], ignore_index=True)
+        summary.loc[summary.model == "second", "outlier_count"] += 10
+        summary.loc[summary.model == "second", "difference_sd_db"] += 10
+        figures = []
+        original_savefig = comparison.plt.Figure.savefig
+
+        def capture_figure(figure, *args, **kwargs):
+            figures.append(figure)
+            return original_savefig(figure, *args, **kwargs)
+
+        with mock.patch.object(comparison.plt.Figure, "savefig", capture_figure):
+            comparison.plot_comparisons(
+                summary, self.root, model_order=["", "second", "", "", "first", ""]
+            )
+        self.assertEqual(len(figures), 2)
+        for figure, metric in zip(figures, ("outlier_count", "difference_sd_db")):
+            axis = figure.axes[0]
+            self.assertEqual(
+                [tick.get_text() for tick in axis.get_xticklabels()],
+                ["", "second", "", "", "first", ""],
+            )
+            for line, (project, comparison_name) in zip(
+                axis.lines,
+                [("quick", "Audiologist"), ("quick", "ASR"), ("win", "Audiologist"), ("win", "ASR")],
+            ):
+                values = summary.loc[
+                    (summary.project == project) & (summary.comparison == comparison_name)
+                ].set_index("model")[metric]
+                np.testing.assert_allclose(
+                    line.get_ydata(),
+                    [np.nan, values["second"], np.nan, np.nan, values["first"], np.nan],
+                )
+                self.assertEqual(line.get_marker(), "o")
+                # NaN slots produce distinct paths, not a connection across the gap.
+                segments = list(line.get_path().iter_segments(remove_nans=True))
+                self.assertEqual([code for _, code in segments], [1, 1])
+
+    def test_model_order_rejects_unknown_missing_and_duplicate_models(self):
+        summary = comparison.summarize_model("first", [self.path])
+        for order in (["first", "unknown"], [""], ["first", "", "first"]):
+            with self.subTest(order=order), self.assertRaisesRegex(ValueError, "--model_order"):
+                comparison.plot_comparisons(summary, self.root, model_order=order)
+
+    def test_cli_parses_model_order_and_preserves_summary_csv(self):
+        output = self.root / "ordered"
+        with redirect_stdout(io.StringIO()), mock.patch.object(
+            comparison, "plot_comparisons", wraps=comparison.plot_comparisons
+        ) as plot:
+            comparison.main([
+                "--model", "first", str(self.path),
+                "--model", "second", str(self.path),
+                "--model_order= second, ,first ",
+                "--output_dir", str(output),
+            ])
+        self.assertEqual(plot.call_args.kwargs["model_order"], ["second", "", "first"])
+        summary = pd.read_csv(output / "model_comparison_summary.csv")
+        self.assertEqual(summary.model.drop_duplicates().tolist(), ["first", "second"])
+        self.assertEqual(summary.shape, (8, 6))
+
+    def test_default_model_order_skips_absent_models_and_preserves_separators(self):
+        self.assertEqual(
+            comparison.DEFAULT_MODEL_ORDER,
+            "tiny.en,tiny,base.en,base,small.en,small,medium.en,medium,large,,"
+            "large_prime,large_prompt,,large_forced_-10,large_forced_0,large_forced_10,"
+            "large_forced_20,large_forced_100,,large_exact_-10,large_exact_0,"
+            "large_exact_10,large_exact_20,large_exact_100",
+        )
+        with redirect_stdout(io.StringIO()), mock.patch.object(
+            comparison, "plot_comparisons", wraps=comparison.plot_comparisons
+        ) as plot:
+            comparison.main([
+                "--model", "large_prompt", str(self.path),
+                "--model", "tiny.en", str(self.path),
+                "--output_dir", str(self.root),
+            ])
+        self.assertEqual(
+            plot.call_args.kwargs["model_order"], ["tiny.en", "", "large_prompt", "", ""]
+        )
+
+    def test_empty_model_order_uses_input_order_for_custom_models(self):
+        with redirect_stdout(io.StringIO()), mock.patch.object(
+            comparison, "plot_comparisons", wraps=comparison.plot_comparisons
+        ) as plot:
+            comparison.main([
+                "--model", "custom", str(self.path),
+                "--model_order=", "--output_dir", str(self.root),
+            ])
+        self.assertIsNone(plot.call_args.kwargs["model_order"])
+
 
 if __name__ == "__main__":
     unittest.main()
