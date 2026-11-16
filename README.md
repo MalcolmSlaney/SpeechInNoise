@@ -121,6 +121,41 @@ can be changed with `--output_csv`, `--snr_summary_csv`, `--subject_snr_csv`,
 `--srt_csv`, `--scatter_plot`, `--srt_scatter_plot`, `--srt_histogram_plot`, `--agreement_csv`, and
 `--noninferiority_csv`.
 
+### Compare ASR model variations
+
+Run `summarize_asr.py` separately for each model, saving its subject-SRT CSVs
+in separate directories. Then reproduce the two "Model Comparison" plots from
+[the Colab notebook](https://colab.research.google.com/drive/1fsi7D-HB9xuC5BBegQQ6kVHhwdgM9xh2):
+
+```bash
+python3 compare_asr_models.py \
+  --model tiny.en results/tiny.en/recognition_quick_srts.csv results/tiny.en/recognition_win_srts.csv \
+  --model large results/large/recognition_all_srts.csv \
+  --model large_prompt results/large_prompt/recognition_all_srts.csv \
+  --output_dir model_comparison
+```
+
+Each `--model` takes a label and one or more subject-SRT CSVs, in plotting
+order. A combined `recognition_all_srts.csv` or separate QuickSIN/WIN CSVs
+work equally well. Do not supply overlapping subject/project rows for a
+model. Only projects `quick` and `win` are plotted.
+
+The outputs are `model_comparison_outliers.png`,
+`model_comparison_stds.png`, and `model_comparison_summary.csv`. Both plots
+have Quick/WIN Audiologist (in-booth) and ASR lines. Differences are each
+subject's in-booth or ASR SRT minus `professional_srt` (the professional-rater
+**mean** supplied by `summarize_asr.py`, not a recomputed median).
+
+Outliers have absolute difference **strictly greater than 2 dB**, configurable
+with `--outlier_threshold`. This is measured from zero, not from the mean
+difference. The second plot uses the sample SD (`ddof=1`) of those differences,
+not the pooled within-subject rater SD used in `summarize_asr.py`'s histogram.
+Missing/nonfinite pairs are excluded independently for each model, project,
+and comparison, with warnings; fewer than two pairs leave an SD gap, and zero
+pairs also leave an outlier-count gap. The summary CSV records the paired
+sample counts (`n`). Models are not restricted to a shared subject cohort:
+use matching upstream inputs for fair comparisons and inspect the sample counts.
+
 Deploy server and detach process from the appropriate folder path.
 ```bash
 conda activate quicksin # Or whatever environment you use
