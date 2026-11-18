@@ -1513,7 +1513,7 @@ def _recording_link(value: Any) -> str:
     if not filename.lower().endswith(".wav"):
         filename += ".wav"
     url = "https://quicksin.stanford.edu/uploads/" + quote(filename, safe="")
-    return f'<a href="{html.escape(url, quote=True)}">Listen</a>'
+    return f'<a class="recording-link" href="{html.escape(url, quote=True)}">Listen</a>'
 
 
 def write_discrepancy_html(
@@ -1603,12 +1603,49 @@ table {{ border-collapse: collapse; width: 100%; font-size: .9rem; }}
 th, td {{ border: 1px solid #d5d8dc; padding: .45rem .6rem; text-align: left; vertical-align: top; }}
 th {{ background: #eef2f5; position: sticky; top: 0; }}
 tr:nth-child(even) {{ background: #f7f9fa; }}
+dialog {{ width: min(420px, 85vw); border: 1px solid #999; border-radius: .5rem; padding: 1.25rem; }}
+dialog::backdrop {{ background: rgba(0, 0, 0, .45); }}
+dialog h2 {{ margin-top: 0; font-size: 1.2rem; }}
+dialog audio {{ width: 100%; }}
+#audio-error {{ color: #a00000; }}
 </style>
 </head>
 <body>
 <h1>{safe_test_name}: recognition disagreements</h1>
 <p>{len(display)} utterances have at least one differing in-booth, ASR, or professional-rater fraction-correct score.</p>
 {table_html}
+<dialog id="audio-dialog" aria-labelledby="audio-title">
+<h2 id="audio-title">Subject audio</h2>
+<audio id="audio-player" controls preload="metadata"></audio>
+<p id="audio-error" role="alert" hidden>Audio could not be loaded. Check server access or use the direct link.</p>
+<p><a id="audio-direct" href="">Open audio directly</a></p>
+<button id="audio-close" type="button">Close</button>
+</dialog>
+<script>
+const audioDialog = document.getElementById("audio-dialog");
+const audioPlayer = document.getElementById("audio-player");
+const audioError = document.getElementById("audio-error");
+const audioDirect = document.getElementById("audio-direct");
+if (typeof audioDialog.showModal === "function") {{
+  document.addEventListener("click", (event) => {{
+    const link = event.target.closest("a.recording-link");
+    if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    audioError.hidden = true;
+    audioPlayer.src = link.href;
+    audioDirect.href = link.href;
+    audioDialog.showModal();
+  }});
+  document.getElementById("audio-close").addEventListener("click", () => audioDialog.close());
+  audioDialog.addEventListener("close", () => {{
+    if (audioDialog.open) return;
+    audioPlayer.pause();
+    audioPlayer.removeAttribute("src");
+    audioPlayer.load();
+  }});
+  audioPlayer.addEventListener("error", () => {{ audioError.hidden = false; }});
+}}
+</script>
 </body>
 </html>
 """

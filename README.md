@@ -78,6 +78,8 @@ plus a three-panel recognition comparison PNG and a disagreement page named
 in-booth, ASR, or a professional rater's fraction-correct score differs, and
 includes the recognized ASR words and links to subject recordings at
 `https://quicksin.stanford.edu/uploads/`, using `audio_results.reply_filename`.
+Clicking a recording opens a small player dialog with playback controls and a
+direct link; the original link also works when JavaScript is unavailable.
 Missing or unsupported recording filenames are marked unavailable; server
 availability and access permissions are not checked. Default output filenames use
 `recognition_{test_name}_...`; `test_name` comes from `--project`, a sole project
