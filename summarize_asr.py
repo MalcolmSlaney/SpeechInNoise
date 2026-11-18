@@ -7,6 +7,7 @@ comparison plots, agreement reports, and per-utterance discrepancy HTML.
 """
 
 import json
+import html
 import logging
 import math
 import os
@@ -18,6 +19,7 @@ from contextlib import closing
 from functools import lru_cache
 from itertools import product
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from urllib.parse import quote
 
 import matplotlib
 
@@ -46,6 +48,7 @@ BASE_COLUMNS = [
     "in_booth_id",
     "snr",
     "filename",
+    "reply_filename",
     "ground_truth",
     "in_booth_truth_values",
     "in_booth_fraction_correct",
@@ -384,6 +387,7 @@ def fetch_detail_records(
             at.lang AS language,
             at.snr,
             at.filename,
+            ar.reply_filename,
             at.answer AS ground_truth,
             aa.ref AS annotation_ref,
             aa.data AS in_booth_data,
@@ -432,6 +436,7 @@ def fetch_detail_records(
                 "in_booth_id": row["in_booth_id"],
                 "snr": row["snr"],
                 "filename": row["filename"],
+                "reply_filename": row["reply_filename"],
                 "ground_truth": row["ground_truth"],
                 "in_booth_truth_values": json.dumps(booth_values) if booth_values is not None else "",
                 "in_booth_fraction_correct": fraction_correct(booth_values),
@@ -1498,6 +1503,19 @@ def _format_asr_words(value: Any) -> str:
     return str(value)
 
 
+def _recording_link(value: Any) -> str:
+    """Create an escaped link to a subject recording, or mark it unavailable."""
+    if not isinstance(value, str) or not value.strip():
+        return "Unavailable"
+    filename = value.strip().rsplit("/", 1)[-1]
+    if not filename or filename in {".", ".."} or filename.startswith(("FOREIGN", "[")):
+        return "Unavailable"
+    if not filename.lower().endswith(".wav"):
+        filename += ".wav"
+    url = "https://quicksin.stanford.edu/uploads/" + quote(filename, safe="")
+    return f'<a href="{html.escape(url, quote=True)}">Listen</a>'
+
+
 def write_discrepancy_html(
     detail_df: pd.DataFrame,
     professional_raters: Iterable[str],
@@ -1530,6 +1548,7 @@ def write_discrepancy_html(
     truth_column = "ground_truth" if "ground_truth" in discrepancies.columns else "answer"
     preferred_columns = [
         "subject_username", "in_booth_id", "test_utterance_id", "project", "snr",
+        "reply_filename",
         truth_column, "asr_words", "in_booth_fraction_correct", "asr_fraction_correct",
         "professional_fraction_correct", *rater_columns, "disagreements",
     ]
@@ -1544,6 +1563,7 @@ def write_discrepancy_html(
             "test_utterance_id": "Test utterance ID",
             "project": "Test",
             "snr": "SNR (dB)",
+            "reply_filename": "Subject audio",
             "ground_truth": "Ground-truth keywords",
             "answer": "Ground-truth keywords",
             "asr_words": "ASR recognized words",
@@ -1560,8 +1580,13 @@ def write_discrepancy_html(
         }
     )
     safe_test_name = re.sub(r"[^A-Za-z0-9 _-]", "_", test_name)
+    if "Subject audio" not in display.columns:
+        display["Subject audio"] = None
+    audio_links = display["Subject audio"].map(_recording_link)
+    display = display.map(lambda value: html.escape(str(value)) if pd.notna(value) else "")
+    display["Subject audio"] = audio_links
     table_html = (
-        display.to_html(index=False, escape=True, border=0, na_rep="")
+        display.to_html(index=False, escape=False, border=0, na_rep="")
         if not display.empty
         else "<p>No utterances with differing recognition scores were found.</p>"
     )

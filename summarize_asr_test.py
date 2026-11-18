@@ -37,7 +37,7 @@ class SummarizeAsrTest(absltest.TestCase):
                     id INTEGER PRIMARY KEY, project TEXT, lang TEXT, snr REAL,
                     filename TEXT, answer TEXT
                 );
-                CREATE TABLE audio_results (id INTEGER PRIMARY KEY, subject INTEGER, trial INTEGER);
+                CREATE TABLE audio_results (id INTEGER PRIMARY KEY, subject INTEGER, trial INTEGER, reply_filename TEXT);
                 CREATE TABLE audio_asr (ref INTEGER, data TEXT);
                 CREATE TABLE audio_annotations (ref INTEGER, data TEXT);
                 CREATE TABLE review_annotations (ref INTEGER, labeler INTEGER, data TEXT);
@@ -49,8 +49,8 @@ class SummarizeAsrTest(absltest.TestCase):
                     (21, 'win', 'en', 4, 'test.wav', 'cat'),
                     (22, 'quick', 'es', 5, 'test.wav', 'cat');
                 INSERT INTO audio_results VALUES
-                    (30, 1, 20), (31, 2, 20), (32, 3, 20), (33, 4, 20),
-                    (34, 1, 21), (35, 1, 22), (36, 1, 20);
+                    (30, 1, 20, 'recording'), (31, 2, 20, 'recording'), (32, 3, 20, 'recording'), (33, 4, 20, 'recording'),
+                    (34, 1, 21, 'recording'), (35, 1, 22, 'recording'), (36, 1, 20, 'recording');
                 INSERT INTO audio_asr VALUES
                     (30, '{"text":"cat"}'), (31, '{"text":"cat"}'),
                     (32, '{"text":"cat"}'), (33, '{"text":"cat"}'),
@@ -122,7 +122,8 @@ class SummarizeAsrTest(absltest.TestCase):
                     "test_utterance_id": 100,
                     "project": "quick",
                     "snr": 5,
-                    "ground_truth": "cat/dog",
+                    "ground_truth": "<script>alert(1)</script>",
+                    "reply_filename": 'uploads/speech & "test".wav',
                     "asr_words": ["dog", "near"],
                     "in_booth_fraction_correct": 0.5,
                     "asr_fraction_correct": 1.0,
@@ -155,6 +156,10 @@ class SummarizeAsrTest(absltest.TestCase):
         with open(output_path, encoding="utf-8") as file:
             page = file.read()
         self.assertIn("ASR recognized words", page)
+        self.assertIn("Subject audio", page)
+        self.assertIn('href="https://quicksin.stanford.edu/uploads/speech%20%26%20%22test%22.wav"', page)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", page)
+        self.assertNotIn("<script>alert(1)</script>", page)
         self.assertIn("dog near", page)
         self.assertIn("ASR fraction correct", page)
         self.assertIn("Professional rater: pro1", page)
@@ -192,7 +197,7 @@ class SummarizeAsrTest(absltest.TestCase):
                 filename TEXT, answer TEXT
             );
             CREATE TABLE audio_results (
-                id INTEGER PRIMARY KEY, subject INTEGER, trial INTEGER
+                id INTEGER PRIMARY KEY, subject INTEGER, trial INTEGER, reply_filename TEXT
             );
             CREATE TABLE audio_asr (ref INTEGER, data TEXT);
             CREATE TABLE audio_annotations (ref INTEGER, data TEXT);
@@ -202,7 +207,7 @@ class SummarizeAsrTest(absltest.TestCase):
             INSERT INTO users VALUES (11, 'pro2@example.org');
             INSERT INTO users VALUES (12, 'student@example.org');
             INSERT INTO audio_trials VALUES (20, 'quick', 'en', 5, 'test.wav', 'cat dog');
-            INSERT INTO audio_results VALUES (30, 1, 20);
+            INSERT INTO audio_results VALUES (30, 1, 20, 'sin_1_20');
             INSERT INTO audio_asr VALUES (30, '{"text":"cat puppy","model_name":"tiny.en"}');
             INSERT INTO audio_annotations VALUES (30, '[true, true]');
             INSERT INTO review_annotations VALUES (30, 10, '[true, false]');
@@ -225,6 +230,7 @@ class SummarizeAsrTest(absltest.TestCase):
         self.assertEqual(row["subject_id"], 1)
         self.assertEqual(row["test_utterance_id"], 20)
         self.assertEqual(row["in_booth_id"], 30)
+        self.assertEqual(row["reply_filename"], "sin_1_20")
         self.assertEqual(json.loads(row["asr_words"]), ["cat", "puppy"])
         self.assertEqual(json.loads(row["in_booth_truth_values"]), [True, True])
         self.assertEqual(json.loads(row["asr_truth_values"]), [True, True])
@@ -237,6 +243,13 @@ class SummarizeAsrTest(absltest.TestCase):
         plot_path = os.path.join(self.create_tempdir().full_path, "comparison.png")
         sa.create_comparison_plot(detail, plot_path)
         self.assertTrue(os.path.getsize(plot_path) > 0)
+
+    def test_recording_link_extension_and_unavailable(self):
+        self.assertIn("/sin_1.wav", sa._recording_link("sin_1"))
+        self.assertIn("/sin_1.wav", sa._recording_link("sin_1.wav"))
+        self.assertIn("/sin_1.WAV", sa._recording_link("sin_1.WAV"))
+        for value in (None, float("nan"), "", "uploads/", "FOREIGN123", "[invalid]", ".."):
+            self.assertEqual(sa._recording_link(value), "Unavailable")
 
     def test_database_state_counts_missing_professional_rater_data(self):
         db_path = os.path.join(self.create_tempdir().full_path, "state.db")

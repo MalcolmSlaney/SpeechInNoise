@@ -76,7 +76,10 @@ It writes per-utterance, project/SNR, subject/project/SNR, and subject SRT CSVs,
 plus a three-panel recognition comparison PNG and a disagreement page named
 `recognition_{test_name}_discrepancies.html`. The page lists utterances where
 in-booth, ASR, or a professional rater's fraction-correct score differs, and
-includes the recognized ASR words. Default output filenames use
+includes the recognized ASR words and links to subject recordings at
+`https://quicksin.stanford.edu/uploads/`, using `audio_results.reply_filename`.
+Missing or unsupported recording filenames are marked unavailable; server
+availability and access permissions are not checked. Default output filenames use
 `recognition_{test_name}_...`; `test_name` comes from `--project`, a sole project
 found in the data, or `all` when multiple projects are included. Explicit output
 relative paths are placed under `--output_dir` (default `.`), while absolute
