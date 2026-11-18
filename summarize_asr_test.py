@@ -341,6 +341,30 @@ class SummarizeAsrTest(absltest.TestCase):
         sa.create_srt_comparison_plot(srts, plot_path)
         self.assertTrue(os.path.getsize(plot_path) > 0)
 
+    def test_srt_comparison_plot_labels_long_error_bars(self):
+        srts = pd.DataFrame(
+            {
+                "subject_id": [1, 2, 3],
+                "subject_username": ["A1S1", "A1S2", None],
+                "project": ["quick"] * 3,
+                "in_booth_srt": [2.0, 4.0, 6.0],
+                "asr_srt": [2.5, 4.5, 6.5],
+                "professional_srt": [3.0, 5.0, 7.0],
+                # Full error-bar lengths: 4 dB, 12 dB, 11 dB.
+                "professional_srt_std": [2.0, 6.0, 5.5],
+            }
+        )
+        texts = []
+        with mock.patch.object(sa.plt, "close") as close:
+            sa.create_srt_comparison_plot(
+                srts, os.path.join(self.create_tempdir().full_path, "plot.png")
+            )
+            figure = close.call_args.args[0]
+            texts = [[text.get_text() for text in axis.texts] for axis in figure.axes]
+        self.assertEqual(sorted(texts[0]), ["3", "A1S2"])
+        self.assertEqual(texts[1], [])
+        self.assertEqual(sorted(texts[2]), ["3", "A1S2"])
+
     def test_srt_difference_histogram_labels_subjects_and_pooled_rater_sd(self):
         srts = pd.DataFrame(
             {

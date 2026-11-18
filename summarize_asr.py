@@ -749,12 +749,28 @@ def create_comparison_plot(detail_df: pd.DataFrame, output_path: str) -> None:
     plt.close(figure)
 
 
-def create_srt_comparison_plot(srts_df: pd.DataFrame, output_path: str) -> None:
+def _subject_labels(points: pd.DataFrame) -> pd.Series:
+    """Return usernames, falling back to subject IDs when usernames are blank."""
+    usernames = points.get("subject_username", pd.Series(index=points.index, dtype=object))
+    subject_ids = points.get("subject_id", pd.Series(points.index, index=points.index))
+    has_username = usernames.notna() & usernames.astype(str).str.strip().ne("")
+    return usernames.where(has_username, subject_ids.astype(str)).astype(str)
+
+
+def create_srt_comparison_plot(
+    srts_df: pd.DataFrame,
+    output_path: str,
+    label_error_bar_db: float = 10.0,
+) -> None:
     """Plot the three paired SRT comparisons, showing professional-rater SD.
+
+    Error bars span ±1 professional-rater SD. Subjects whose full error bar
+    (2 × SD) is longer than ``label_error_bar_db`` are labeled by username.
 
     Args:
         srts_df: Per-subject/project SRTs and professional-rater sample SDs.
         output_path: Destination image path accepted by Matplotlib.
+        label_error_bar_db: Error-bar length (dB) above which points are labeled.
 
     Raises:
         OSError: If the plot cannot be written.
@@ -770,7 +786,8 @@ def create_srt_comparison_plot(srts_df: pd.DataFrame, output_path: str) -> None:
         for project in projects:
             points = srts_df.loc[
                 srts_df["project"] == project,
-                [x_column, y_column, "professional_srt_std"],
+                [x_column, y_column, "professional_srt_std"]
+                + [c for c in ("subject_id", "subject_username") if c in srts_df.columns],
             ].dropna(subset=[x_column, y_column])
             has_rater_sd = points["professional_srt_std"].notna()
             error_points = points.loc[has_rater_sd]
@@ -787,6 +804,18 @@ def create_srt_comparison_plot(srts_df: pd.DataFrame, output_path: str) -> None:
                     capsize=2,
                     label=str(project),
                 )
+                if "professional_srt" in (x_column, y_column):
+                    long_bars = error_points.loc[
+                        2 * error_points["professional_srt_std"] > label_error_bar_db
+                    ]
+                    for (_, point), label in zip(long_bars.iterrows(), _subject_labels(long_bars)):
+                        axis.annotate(
+                            label,
+                            (point[x_column], point[y_column]),
+                            xytext=(3, 3),
+                            textcoords="offset points",
+                            fontsize=7,
+                        )
             if not plain_points.empty:
                 axis.scatter(
                     plain_points[x_column],

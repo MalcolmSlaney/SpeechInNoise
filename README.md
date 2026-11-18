@@ -91,7 +91,9 @@ plots, text report, and HTML together. Input paths are unaffected.
 The subject SRT CSV includes
 each professional rater's fitted SRT, their mean SRT (the reference), and
 their standard deviation. It also writes an SRT comparison PNG with rater-SRT
-standard-deviation error bars and `recognition_{test_name}_srt_histogram.png`,
+standard-deviation error bars (±1 SD; subjects whose full error bar is longer
+than 10 dB are labeled with their username) and
+`recognition_{test_name}_srt_histogram.png`,
 with in-booth and ASR SRT differences from the professional-rater mean in
 separate panels and one row per project. Each bar lists subject usernames
 (falling back to numeric subject IDs). The shaded range is centered on each
