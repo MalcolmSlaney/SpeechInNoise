@@ -1,11 +1,7 @@
-# Generate the figures needed for the Ear and HEaring Paper
+# Compute all the summaries from the ASR results.
 
-# Be sure to run 
-# Be sure to run this script from the root of the project directory.
-
-# Be sure to first run
+# Be sure to 
 #   conda activate quicksin
-
 
 set -e
 shopt -s nullglob
