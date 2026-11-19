@@ -410,14 +410,14 @@ class SummarizeAsrTest(absltest.TestCase):
                 "subject_id": [1, 2, 3, 4, 5],
                 "subject_username": ["A1S1", "A1S2", None, "A1S4", "A1S5"],
                 "project": ["quick", "quick", "win", "win", "win"],
-                "in_booth_srt": [2.0, 4.0, 6.0, 8.0, 9.0],
-                "asr_srt": [2.5, 4.5, 6.5, 8.5, 9.5],
+                "in_booth_srt": [2.0, 7.0, 6.0, 12.0, 9.0],
+                "asr_srt": [2.5, 7.0, 6.5, 8.5, 9.5],
                 "professional_srt": [3.0, 5.0, 7.0, 9.0, 10.0],
-                "professional_srt_std": [2.0, 7.5, 8.0, 6.0, float("nan")],
+                "professional_srt_std": [2.0, 2.5, 8.0, 6.0, float("nan")],
             }
         )
         path = os.path.join(self.create_tempdir().full_path, "plot.png")
-        for kwargs, expected in (({}, ["3"]), ({"label_error_bar_db": 10.0}, ["3", "A1S2", "A1S4"])):
+        for kwargs, expected in (({}, ["3", "A1S4"]), ({"label_error_bar_db": 3.0}, ["3", "A1S1", "A1S2", "A1S4"])):
             with self.subTest(kwargs=kwargs):
                 with mock.patch.object(sa.plt, "close") as close:
                     sa.create_srt_comparison_plot(srts, path, **kwargs)
@@ -435,6 +435,24 @@ class SummarizeAsrTest(absltest.TestCase):
                     for annotation in axis.texts:
                         project = "win" if annotation.get_text() in {"3", "A1S4"} else "quick"
                         self.assertEqual(annotation.get_color(), colors[project])
+                        username = annotation.get_text()
+                        point = srts.iloc[2] if username == "3" else srts.loc[
+                            srts["subject_username"] == username
+                        ].iloc[0]
+                        xcol, ycol = (
+                            ("in_booth_srt", "professional_srt")
+                            if axis is figure.axes[0]
+                            else ("professional_srt", "asr_srt")
+                        )
+                        x, y, sd = point[xcol], point[ycol], point["professional_srt_std"]
+                        expected_endpoint = (
+                            (x, y + sd if y >= x else y - sd)
+                            if ycol == "professional_srt"
+                            else (x + sd if x >= y else x - sd, y)
+                        )
+                        self.assertEqual(annotation.xy, expected_endpoint)
+                        self.assertBetween(annotation.xy[0], *axis.get_xlim())
+                        self.assertBetween(annotation.xy[1], *axis.get_ylim())
 
     def test_srt_difference_histogram_labels_subjects_and_pooled_rater_sd(self):
         srts = pd.DataFrame(

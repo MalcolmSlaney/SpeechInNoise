@@ -820,12 +820,13 @@ def _subject_labels(points: pd.DataFrame) -> pd.Series:
 def create_srt_comparison_plot(
     srts_df: pd.DataFrame,
     output_path: str,
-    label_error_bar_db: float = 15.0,
+    label_error_bar_db: float = 5.0,
 ) -> None:
     """Plot the three paired SRT comparisons, showing professional-rater SD.
 
     Error bars span ±1 professional-rater SD. Subjects whose full error bar
-    (2 × SD) is longer than ``label_error_bar_db`` are labeled by username.
+    (2 × SD) is longer than ``label_error_bar_db`` are labeled by username
+    at the endpoint farthest from the equality diagonal.
 
     Args:
         srts_df: Per-subject/project SRTs and professional-rater sample SDs.
@@ -842,6 +843,21 @@ def create_srt_comparison_plot(
     ]
     figure, axes = plt.subplots(1, 3, figsize=(13, 4), sharex=True, sharey=True)
     projects = sorted(srts_df["project"].dropna().unique()) if not srts_df.empty else []
+    values = srts_df[["in_booth_srt", "professional_srt", "asr_srt"]].to_numpy(dtype=float).ravel()
+    finite_values = values[np.isfinite(values)].tolist()
+    for comparison in ("in_booth_srt", "asr_srt"):
+        eligible = srts_df.loc[
+            np.isfinite(srts_df["professional_srt"])
+            & np.isfinite(srts_df[comparison])
+            & np.isfinite(srts_df["professional_srt_std"])
+        ]
+        finite_values.extend((eligible["professional_srt"] - eligible["professional_srt_std"]).tolist())
+        finite_values.extend((eligible["professional_srt"] + eligible["professional_srt_std"]).tolist())
+    limits = None
+    if finite_values:
+        lower, upper = min(finite_values), max(finite_values)
+        margin = max((upper - lower) * 0.08, 0.5)
+        limits = (lower - margin, upper + margin)
     for axis, (x_column, y_column, title) in zip(axes, comparisons):
         for project in projects:
             points = srts_df.loc[
@@ -870,13 +886,29 @@ def create_srt_comparison_plot(
                     ]
                     for (_, point), label in zip(long_bars.iterrows(), _subject_labels(long_bars)):
                         print('Found long error bar for point:', point, 'with label:', label)
+                        x, y = point[x_column], point[y_column]
+                        sd = point["professional_srt_std"]
+                        if x_column == "professional_srt":
+                            direction = 1 if x >= y else -1
+                            endpoint = (x + direction * sd, y)
+                            offset = (3 * direction, 3)
+                            horizontal_alignment = "left" if direction > 0 else "right"
+                            vertical_alignment = "bottom"
+                        else:
+                            direction = 1 if y >= x else -1
+                            endpoint = (x, y + direction * sd)
+                            offset = (3, 3 * direction)
+                            horizontal_alignment = "left"
+                            vertical_alignment = "bottom" if direction > 0 else "top"
                         axis.annotate(
                             label,
-                            (point[x_column], point[y_column]),
-                            xytext=(3, 3),
+                            endpoint,
+                            xytext=offset,
                             textcoords="offset points",
                             fontsize=7,
                             color=error_bars.lines[0].get_color(),
+                            ha=horizontal_alignment,
+                            va=vertical_alignment,
                         )
             if not plain_points.empty:
                 axis.scatter(
@@ -886,12 +918,7 @@ def create_srt_comparison_plot(
                     alpha=0.65,
                     label=str(project),
                 )
-        finite_values = srts_df[[x_column, y_column]].to_numpy(dtype=float).ravel()
-        finite_values = finite_values[np.isfinite(finite_values)]
-        if finite_values.size:
-            lower, upper = float(finite_values.min()), float(finite_values.max())
-            margin = max((upper - lower) * 0.08, 0.5)
-            limits = (lower - margin, upper + margin)
+        if limits is not None:
             axis.plot(limits, limits, "k--", linewidth=0.8)
             axis.set_xlim(limits)
             axis.set_ylim(limits)
@@ -1868,7 +1895,7 @@ if __name__ == "__main__":
     flags.DEFINE_string("scatter_plot", "recognition_{test_name}_comparison.png", "Three-panel comparison plot output.")
     flags.DEFINE_string("srt_scatter_plot", "recognition_{test_name}_srt_comparison.png", "Three-panel SRT comparison plot output.")
     flags.DEFINE_float(
-        "srt_error_bar_label_db", 15.0,
+        "srt_error_bar_label_db", 5.0,
         "Label subjects when the full professional-rater error bar (2 SD) exceeds this length in dB.",
         lower_bound=0.0,
     )

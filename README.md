@@ -99,9 +99,12 @@ not establish the threshold beyond the tested range. This applies to the
 in-booth and ASR fits as well as each professional-rater fit.
 It also writes an SRT comparison PNG with rater-SRT
 standard-deviation error bars (±1 SD; subjects whose full error bar is longer
-than 15 dB are labeled with their username in the project's color). Set
+than 5 dB are labeled with their username in the project's color at the
+endpoint farthest from the equality diagonal). Set
 `--srt_error_bar_label_db` to change this threshold, measured as the full
 length of the error bar (2 × SD). Blank usernames fall back to subject IDs.
+The plot axes include the full error bars, even when they extend beyond the
+observed SRTs.
 It also writes
 `recognition_{test_name}_srt_histogram.png`,
 with in-booth and ASR SRT differences from the professional-rater mean in
