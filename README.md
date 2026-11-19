@@ -95,7 +95,10 @@ The subject SRT CSV includes
 each professional rater's fitted SRT, their mean SRT (the reference), and
 their standard deviation. It also writes an SRT comparison PNG with rater-SRT
 standard-deviation error bars (±1 SD; subjects whose full error bar is longer
-than 10 dB are labeled with their username) and
+than 15 dB are labeled with their username in the project's color). Set
+`--srt_error_bar_label_db` to change this threshold, measured as the full
+length of the error bar (2 × SD). Blank usernames fall back to subject IDs.
+It also writes
 `recognition_{test_name}_srt_histogram.png`,
 with in-booth and ASR SRT differences from the professional-rater mean in
 separate panels and one row per project. Each bar lists subject usernames

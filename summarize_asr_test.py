@@ -407,27 +407,34 @@ class SummarizeAsrTest(absltest.TestCase):
     def test_srt_comparison_plot_labels_long_error_bars(self):
         srts = pd.DataFrame(
             {
-                "subject_id": [1, 2, 3],
-                "subject_username": ["A1S1", "A1S2", None],
-                "project": ["quick"] * 3,
-                "in_booth_srt": [2.0, 4.0, 6.0],
-                "asr_srt": [2.5, 4.5, 6.5],
-                "professional_srt": [3.0, 5.0, 7.0],
-                # Full error-bar lengths: 4 dB, 12 dB, 11 dB.
-                "professional_srt_std": [2.0, 6.0, 5.5],
+                "subject_id": [1, 2, 3, 4, 5],
+                "subject_username": ["A1S1", "A1S2", None, "A1S4", "A1S5"],
+                "project": ["quick", "quick", "win", "win", "win"],
+                "in_booth_srt": [2.0, 4.0, 6.0, 8.0, 9.0],
+                "asr_srt": [2.5, 4.5, 6.5, 8.5, 9.5],
+                "professional_srt": [3.0, 5.0, 7.0, 9.0, 10.0],
+                "professional_srt_std": [2.0, 7.5, 8.0, 6.0, float("nan")],
             }
         )
-        texts = []
-        with mock.patch.object(sa.plt, "close") as close:
-            sa.create_srt_comparison_plot(
-                srts, os.path.join(self.create_tempdir().full_path, "plot.png")
-            )
-            figure = close.call_args.args[0]
-            texts = [[text.get_text() for text in axis.texts] for axis in figure.axes]
-        self.addCleanup(sa.plt.close, figure)
-        self.assertEqual(sorted(texts[0]), ["3", "A1S2"])
-        self.assertEqual(texts[1], [])
-        self.assertEqual(sorted(texts[2]), ["3", "A1S2"])
+        path = os.path.join(self.create_tempdir().full_path, "plot.png")
+        for kwargs, expected in (({}, ["3"]), ({"label_error_bar_db": 10.0}, ["3", "A1S2", "A1S4"])):
+            with self.subTest(kwargs=kwargs):
+                with mock.patch.object(sa.plt, "close") as close:
+                    sa.create_srt_comparison_plot(srts, path, **kwargs)
+                    figure = close.call_args.args[0]
+                    texts = [[text.get_text() for text in axis.texts] for axis in figure.axes]
+                self.addCleanup(sa.plt.close, figure)
+                self.assertEqual(sorted(texts[0]), expected)
+                self.assertEqual(texts[1], [])
+                self.assertEqual(sorted(texts[2]), expected)
+                for axis in (figure.axes[0], figure.axes[2]):
+                    colors = {
+                        container.get_label(): container.lines[0].get_color()
+                        for container in axis.containers
+                    }
+                    for annotation in axis.texts:
+                        project = "win" if annotation.get_text() in {"3", "A1S4"} else "quick"
+                        self.assertEqual(annotation.get_color(), colors[project])
 
     def test_srt_difference_histogram_labels_subjects_and_pooled_rater_sd(self):
         srts = pd.DataFrame(

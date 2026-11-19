@@ -819,7 +819,7 @@ def _subject_labels(points: pd.DataFrame) -> pd.Series:
 def create_srt_comparison_plot(
     srts_df: pd.DataFrame,
     output_path: str,
-    label_error_bar_db: float = 10.0,
+    label_error_bar_db: float = 15.0,
 ) -> None:
     """Plot the three paired SRT comparisons, showing professional-rater SD.
 
@@ -852,7 +852,7 @@ def create_srt_comparison_plot(
             error_points = points.loc[has_rater_sd]
             plain_points = points.loc[~has_rater_sd]
             if not error_points.empty:
-                axis.errorbar(
+                error_bars = axis.errorbar(
                     error_points[x_column],
                     error_points[y_column],
                     xerr=error_points["professional_srt_std"] if x_column == "professional_srt" else None,
@@ -874,6 +874,7 @@ def create_srt_comparison_plot(
                             xytext=(3, 3),
                             textcoords="offset points",
                             fontsize=7,
+                            color=error_bars.lines[0].get_color(),
                         )
             if not plain_points.empty:
                 axis.scatter(
@@ -1834,7 +1835,7 @@ def main(argv: List[str]) -> None:
         create_comparison_plot(detail_df, scatter_plot)
         print(f"Wrote comparison plot to {scatter_plot}")
     if not FLAGS.no_plot and not srt_df.empty:
-        create_srt_comparison_plot(srt_df, srt_scatter_plot)
+        create_srt_comparison_plot(srt_df, srt_scatter_plot, FLAGS.srt_error_bar_label_db)
         print(f"Wrote SRT comparison plot to {srt_scatter_plot}")
         create_srt_difference_histogram(srt_df, srt_histogram_plot, FLAGS.histogram_bins)
         print(f"Wrote SRT difference histogram to {srt_histogram_plot}")
@@ -1864,6 +1865,14 @@ if __name__ == "__main__":
     flags.DEFINE_string("srt_csv", "recognition_{test_name}_srts.csv", "Per-subject/project SRT and score-list CSV output.")
     flags.DEFINE_string("scatter_plot", "recognition_{test_name}_comparison.png", "Three-panel comparison plot output.")
     flags.DEFINE_string("srt_scatter_plot", "recognition_{test_name}_srt_comparison.png", "Three-panel SRT comparison plot output.")
+    flags.DEFINE_float(
+        "srt_error_bar_label_db", 15.0,
+        "Label subjects when the full professional-rater error bar (2 SD) exceeds this length in dB.",
+        lower_bound=0.0,
+    )
+    flags.register_validator(
+        "srt_error_bar_label_db", math.isfinite, message="Must be a finite number."
+    )
     flags.DEFINE_string("srt_histogram_plot", "recognition_{test_name}_srt_histogram.png", "SRT difference histogram output.")
     flags.DEFINE_integer("histogram_bins", 10, "Number of bins for SRT difference histograms.", lower_bound=1)
     flags.DEFINE_string("agreement_csv", "recognition_{test_name}_srt_agreement.csv", "Bland–Altman and ICC(3,1) summary CSV output.")
