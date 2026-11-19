@@ -6,6 +6,7 @@ per-utterance CSV, project/SNR and subject/SNR summaries, subject SRT fits,
 comparison plots, agreement reports, and per-utterance discrepancy HTML.
 """
 
+import csv
 import json
 import html
 import logging
@@ -160,17 +161,37 @@ def parse_truth_values(value: Any) -> Optional[List[bool]]:
     return result
 
 
-def read_valid_users(path: str) -> Set[str]:
-    """Read an exact-case subject allowlist, ignoring comments and blank lines."""
-    with open(path, "r", encoding="utf-8") as file:
-        usernames = {
-            username
-            for line in file
-            if (username := line.split("#", 1)[0].strip())
-        }
-    if not usernames:
-        raise ValueError(f"Valid-user file {path} contains no usernames.")
-    return usernames
+def read_subject_lists(path: str) -> Dict[str, Dict[str, Set[int]]]:
+    """Read exact subject usernames and their allowed QuickSIN and WIN lists."""
+    subjects: Dict[str, Dict[str, Set[int]]] = {}
+    with open(path, "r", encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        columns = {"Subject ID", "QS_5dB_Lists", "WIN_List"}
+        missing = columns - set(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"Subject tracking file {path} is missing columns: {', '.join(sorted(missing))}")
+        for row in reader:
+            username = (row["Subject ID"] or "").strip()
+            if not username:
+                raise ValueError(f"Missing Subject ID in {path} at line {reader.line_num}.")
+            if username in subjects:
+                raise ValueError(f"Duplicate Subject ID {username!r} in {path} at line {reader.line_num}.")
+            lists: Dict[str, Set[int]] = {}
+            for project, column in (("quick", "QS_5dB_Lists"), ("win", "WIN_List")):
+                value = (row[column] or "").strip()
+                try:
+                    entries = [item.strip() for item in value.split(",")] if value else []
+                    if any(not item.isascii() or not item.isdigit() or int(item) <= 0 for item in entries):
+                        raise ValueError
+                    lists[project] = {int(item) for item in entries}
+                except ValueError as exc:
+                    raise ValueError(
+                        f"Invalid {column} value {value!r} in {path} at line {reader.line_num}."
+                    ) from exc
+            subjects[username] = lists
+    if not subjects:
+        raise ValueError(f"Subject tracking file {path} contains no subjects.")
+    return subjects
 
 
 def _valid_user_filter(valid_users: Optional[Set[str]]) -> Tuple[str, Tuple[str, ...]]:
@@ -184,6 +205,32 @@ def _valid_user_filter(valid_users: Optional[Set[str]]) -> Tuple[str, Tuple[str,
     return (
         f"AND ar.subject IN (SELECT id FROM users WHERE username IN ({placeholders}))",
         usernames,
+    )
+
+
+def _subject_list_filter(
+    subject_lists: Optional[Dict[str, Dict[str, Set[int]]]],
+) -> Tuple[str, Tuple[Any, ...]]:
+    """Restrict subjects and their QuickSIN and WIN trials to selected lists."""
+    if subject_lists is None:
+        return "", ()
+    subject_filter, subject_parameters = _valid_user_filter(set(subject_lists))
+    clauses = []
+    parameters: List[Any] = []
+    for username, projects in sorted(subject_lists.items()):
+        for project in ("quick", "win"):
+            numbers = sorted(projects.get(project, set()))
+            if numbers:
+                placeholders = ", ".join("?" for _ in numbers)
+                clauses.append(
+                    "(ar.subject IN (SELECT id FROM users WHERE username = ?) "
+                    f"AND at.project = ? AND at.trial_number IN ({placeholders}))"
+                )
+                parameters.extend((username, project, *numbers))
+    allowed = " OR ".join(clauses) if clauses else "0"
+    return (
+        f"{subject_filter} AND (at.project IS NULL OR at.project NOT IN ('quick', 'win') OR {allowed})",
+        (*subject_parameters, *parameters),
     )
 
 
@@ -358,6 +405,7 @@ def fetch_detail_records(
     project: str = "",
     language: str = "",
     valid_users: Optional[Set[str]] = None,
+    subject_lists: Optional[Dict[str, Dict[str, Set[int]]]] = None,
 ) -> List[Dict[str, Any]]:
     """Load result rows and assemble one scored record per in-booth trial.
 
@@ -368,6 +416,7 @@ def fetch_detail_records(
         project: Project filter; an empty string includes all projects.
         language: Language filter; an empty string includes all languages.
         valid_users: Exact subject usernames to include; None includes all.
+        subject_lists: Allowed subjects and their QuickSIN and WIN list numbers, or None.
 
     Returns:
         Scored records for ASR-backed trials, including in-booth scores,
@@ -377,6 +426,7 @@ def fetch_detail_records(
         sqlite3.Error: If the database cannot be queried.
     """
     subject_filter, subject_parameters = _valid_user_filter(valid_users)
+    list_filter, list_parameters = _subject_list_filter(subject_lists)
     query = f"""
         SELECT
             ar.id AS in_booth_id,
@@ -405,10 +455,13 @@ def fetch_detail_records(
           AND (? = '' OR at.project = ?)
           AND (? = '' OR at.lang = ?)
           {subject_filter}
+          {list_filter}
         ORDER BY ar.id, reviewer.username
     """
     with closing(sqlite3.connect(dbfile)) as connection:
-        cursor = connection.execute(query, (project, project, language, language, *subject_parameters))
+        cursor = connection.execute(
+            query, (project, project, language, language, *subject_parameters, *list_parameters)
+        )
         columns = [column[0] for column in cursor.description]
         rows = cursor.fetchall()
 
@@ -476,6 +529,7 @@ def summarize_database_state(
     project: str = "",
     language: str = "",
     valid_users: Optional[Set[str]] = None,
+    subject_lists: Optional[Dict[str, Dict[str, Set[int]]]] = None,
 ) -> Dict[str, int]:
     """Count selected result rows and annotation coverage before scoring.
 
@@ -485,6 +539,7 @@ def summarize_database_state(
         project: Project filter; an empty string includes all projects.
         language: Language filter; an empty string includes all languages.
         valid_users: Exact subject usernames to include; None includes all.
+        subject_lists: Allowed subjects and their QuickSIN and WIN list numbers, or None.
 
     Returns:
         Counts of distinct result, ASR-backed, in-booth-annotated, and
@@ -495,6 +550,7 @@ def summarize_database_state(
         sqlite3.Error: If the database cannot be queried.
     """
     subject_filter, subject_parameters = _valid_user_filter(valid_users)
+    list_filter, list_parameters = _subject_list_filter(subject_lists)
     query = f"""
         SELECT
             ar.id AS result_id,
@@ -511,6 +567,7 @@ def summarize_database_state(
         WHERE (? = '' OR at.project = ?)
           AND (? = '' OR at.lang = ?)
           {subject_filter}
+          {list_filter}
     """
     allowed_raters = {username.casefold() for username in professional_raters}
     all_result_ids: Set[int] = set()
@@ -518,7 +575,9 @@ def summarize_database_state(
     in_booth_result_ids: Set[int] = set()
     professional_result_ids: Set[int] = set()
     with closing(sqlite3.connect(dbfile)) as connection:
-        rows = connection.execute(query, (project, project, language, language, *subject_parameters)).fetchall()
+        rows = connection.execute(
+            query, (project, project, language, language, *subject_parameters, *list_parameters)
+        ).fetchall()
 
     for result_id, asr_data, in_booth_data, reviewer_username, reviewer_data in rows:
         all_result_ids.add(result_id)
@@ -1700,13 +1759,13 @@ def main(argv: List[str]) -> None:
     logging.info("Reading ASR-backed trials from %s", FLAGS.dbfile)
     homonyms = read_homonyms(FLAGS.homonyms)
     professional_raters = read_professional_raters(FLAGS.professional_raters)
-    valid_users = read_valid_users(FLAGS.valid_users_file) if FLAGS.valid_users_file else None
+    subject_lists = read_subject_lists(FLAGS.valid_users_file) if FLAGS.valid_users_file else None
     database_state = summarize_database_state(
         FLAGS.dbfile,
         professional_raters,
         project=FLAGS.project,
         language=FLAGS.language,
-        valid_users=valid_users,
+        subject_lists=subject_lists,
     )
     print(
         "Database state before scoring: "
@@ -1723,7 +1782,7 @@ def main(argv: List[str]) -> None:
         homonyms,
         project=FLAGS.project,
         language=FLAGS.language,
-        valid_users=valid_users,
+        subject_lists=subject_lists,
     )
     detail_df = build_detail_dataframe(records, professional_raters)
     test_name = resolve_test_name(FLAGS.project, detail_df)
@@ -1796,8 +1855,8 @@ if __name__ == "__main__":
     )
     flags.DEFINE_string(
         "valid_users_file",
-        "metadata/valid_users.txt",
-        "Optional file of exact subject usernames to include, one per line; empty includes all subjects.",
+        "Clean_ASR_SubjectTracking_2025.csv",
+        "Subject tracking CSV for usernames and QuickSIN/WIN lists; empty disables these filters.",
     )
     flags.DEFINE_string("output_csv", "recognition_{test_name}_by_utterance.csv", "Per-utterance CSV output.")
     flags.DEFINE_string("snr_summary_csv", "recognition_{test_name}_by_snr.csv", "Project/SNR summary CSV output.")

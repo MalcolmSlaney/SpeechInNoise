@@ -15,17 +15,80 @@ import summarize_asr as sa
 
 class SummarizeAsrTest(absltest.TestCase):
 
-    def test_read_valid_users_preserves_case_and_rejects_empty_files(self):
-        path = os.path.join(self.create_tempdir().full_path, "valid_users.txt")
+    def test_read_subject_lists(self):
+        path = os.path.join(self.create_tempdir().full_path, "subjects.csv")
+        header = "Subject ID,QS_5dB_Lists,WIN_List\n"
         with open(path, "w", encoding="utf-8") as file:
-            file.write("# Valid subjects\n\nA1S1 # included\nA1S1\nA2S2\n")
-        self.assertEqual(sa.read_valid_users(path), {"A1S1", "A2S2"})
-        with open(path, "w", encoding="utf-8") as file:
-            file.write("# No usernames\n\n")
-        with self.assertRaisesRegex(ValueError, "contains no usernames"):
-            sa.read_valid_users(path)
+            file.write(header + 'A1S1,"5, 9",52\nA2S2,,21\n')
+        self.assertEqual(
+            sa.read_subject_lists(path),
+            {"A1S1": {"quick": {5, 9}, "win": {52}},
+             "A2S2": {"quick": set(), "win": {21}}},
+        )
+        for contents, error in (
+            (header, "contains no subjects"),
+            ("Subject ID,WIN_List\nA1S1,52\n", "missing columns"),
+            (header + ",5,52\n", "Missing Subject ID"),
+            (header + "A1S1,5,52\nA1S1,9,21\n", "Duplicate Subject ID"),
+            (header + 'A1S1,"5,",52\n', "Invalid QS_5dB_Lists"),
+            (header + "A1S1,5,2.5\n", "Invalid WIN_List"),
+        ):
+            with self.subTest(contents=contents):
+                with open(path, "w", encoding="utf-8") as file:
+                    file.write(contents)
+                with self.assertRaisesRegex(ValueError, error):
+                    sa.read_subject_lists(path)
         with self.assertRaises(OSError):
-            sa.read_valid_users(path + ".missing")
+            sa.read_subject_lists(path + ".missing")
+
+    def test_subject_lists_filter_scoring_and_coverage(self):
+        db_path = os.path.join(self.create_tempdir().full_path, "subject_lists.db")
+        with sqlite3.connect(db_path) as connection:
+            connection.executescript(
+                """
+                CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT);
+                CREATE TABLE audio_trials (
+                    id INTEGER PRIMARY KEY, project TEXT, lang TEXT, snr REAL,
+                    filename TEXT, answer TEXT, trial_number INTEGER
+                );
+                CREATE TABLE audio_results (id INTEGER PRIMARY KEY, subject INTEGER, trial INTEGER, reply_filename TEXT);
+                CREATE TABLE audio_asr (ref INTEGER, data TEXT);
+                CREATE TABLE audio_annotations (ref INTEGER, data TEXT);
+                CREATE TABLE review_annotations (ref INTEGER, labeler INTEGER, data TEXT);
+                INSERT INTO users VALUES (1, 'A1S1'), (2, 'A2S2'), (3, 'unlisted');
+                INSERT INTO audio_trials VALUES
+                    (20, 'quick', 'en', 5, 'test.wav', 'cat', 5),
+                    (21, 'quick', 'en', 10, 'test.wav', 'cat', 9),
+                    (22, 'quick', 'en', 5, 'test.wav', 'cat', 10),
+                    (23, 'win', 'en', 4, 'test.wav', 'cat', 52),
+                    (24, 'win', 'en', 4, 'test.wav', 'cat', 21),
+                    (25, 'cnc', 'en', 5, 'test.wav', 'cat', 1);
+                INSERT INTO audio_results VALUES
+                    (30, 1, 20, 'r'), (31, 1, 21, 'r'), (32, 1, 22, 'r'),
+                    (33, 1, 23, 'r'), (34, 1, 24, 'r'), (35, 1, 25, 'r'),
+                    (36, 2, 20, 'r'), (37, 2, 24, 'r'), (38, 3, 20, 'r'),
+                    (39, 1, 20, 'r'), (40, 3, 25, 'r');
+                INSERT INTO audio_asr
+                    SELECT id, '{"text":"cat"}' FROM audio_results WHERE id != 39;
+                """
+            )
+        selections = {
+            "A1S1": {"quick": {5, 9}, "win": {52}},
+            "A2S2": {"quick": set(), "win": {21}},
+        }
+        kwargs = {"subject_lists": selections}
+        records = sa.fetch_detail_records(db_path, set(), {}, **kwargs)
+        self.assertEqual([row["in_booth_id"] for row in records], [30, 31, 33, 35, 37])
+        state = sa.summarize_database_state(db_path, set(), **kwargs)
+        self.assertEqual(state["result_utterances"], 6)
+        self.assertEqual(state["asr_utterances"], 5)
+        self.assertEqual(
+            [row["in_booth_id"] for row in sa.fetch_detail_records(db_path, set(), {}, project="quick", **kwargs)],
+            [30, 31],
+        )
+        self.assertEqual(sa.summarize_database_state(db_path, set(), project="win", **kwargs)["result_utterances"], 2)
+        self.assertLen(sa.fetch_detail_records(db_path, set(), {}), 10)
+        self.assertEmpty(sa.fetch_detail_records(db_path, set(), {}, subject_lists={}))
 
     def test_valid_users_filter_applies_to_scoring_and_coverage(self):
         db_path = os.path.join(self.create_tempdir().full_path, "valid_users.db")
@@ -361,6 +424,7 @@ class SummarizeAsrTest(absltest.TestCase):
             )
             figure = close.call_args.args[0]
             texts = [[text.get_text() for text in axis.texts] for axis in figure.axes]
+        self.addCleanup(sa.plt.close, figure)
         self.assertEqual(sorted(texts[0]), ["3", "A1S2"])
         self.assertEqual(texts[1], [])
         self.assertEqual(sorted(texts[2]), ["3", "A1S2"])
