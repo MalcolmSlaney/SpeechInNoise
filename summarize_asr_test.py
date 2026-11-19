@@ -580,9 +580,21 @@ class SummarizeAsrTest(absltest.TestCase):
 
         self.assertAlmostEqual(sa.fit_srt(snrs, scores), expected_midpoint, places=2)
         self.assertTrue(math.isnan(sa.fit_srt([0, 5], [0.2, 0.8]))) # Not enough points to fit reliably
-        self.assertTrue(math.isnan(sa.fit_srt([0, 5, 10], [0.5, 0.5, 0.5])))
+        self.assertEqual(sa.fit_srt([0, 5, 10], [0.5, 0.5, 0.5]), 0.0)
         self.assertEqual(sa.fit_srt([10, 0, 5], [0.6, 0.8, 1.0]), 0.0)
         self.assertEqual(sa.fit_srt([10, 0, 5], [0.1, 0.2, 0.4]), 10.0)
+
+    def test_fit_srt_clips_fitted_midpoints_to_finite_scored_snrs(self):
+        snrs = [-100, 0, 5, 10, 15, 100]
+        self.assertEqual(
+            sa.fit_srt(snrs, [float("nan"), 0.3, 0.7, 0.9, 0.3, float("nan")]),
+            0.0,
+        )
+        self.assertEqual(
+            sa.fit_srt(snrs, [float("nan"), 0.1, 0.1, 0.5, 0.1, float("nan")]),
+            15.0,
+        )
+        self.assertTrue(math.isnan(sa.fit_srt([0, 5], [float("nan"), float("nan")])))
 
     def test_bland_altman_statistics(self):
         reference = [1.0, 2.0, 3.0, 4.0]

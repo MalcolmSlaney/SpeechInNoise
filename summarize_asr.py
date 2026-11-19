@@ -649,9 +649,10 @@ def fit_srt(snrs: Sequence[float], scores: Sequence[float]) -> float:
         scores: Fraction-correct values at each SNR.
 
     Returns:
-        Fitted midpoint in dB. If all finite scores exceed or fall below 0.5,
-        returns the minimum or maximum observed SNR respectively. Returns NaN
-        when the remaining data are insufficient or the fit fails.
+        Fitted midpoint in dB, clipped to the range of SNRs with finite scores.
+        If all finite scores are at least 0.5 or fall below 0.5, returns the
+        minimum or maximum observed SNR respectively. Returns NaN when the
+        remaining data are insufficient or the fit fails.
     """
     x = np.asarray(snrs, dtype=float)
     y = np.asarray(scores, dtype=float)
@@ -659,7 +660,7 @@ def fit_srt(snrs: Sequence[float], scores: Sequence[float]) -> float:
     x, y = x[valid], y[valid]
     if not len(x):
         return float("nan")
-    if np.all(y > 0.5):
+    if np.all(y >= 0.5):
         return float(np.min(x))
     if np.all(y < 0.5):
         return float(np.max(x))
@@ -698,7 +699,7 @@ def fit_srt(snrs: Sequence[float], scores: Sequence[float]) -> float:
             bounds=((0.001, np.min(x) - 2 * x_range), (50.0, np.max(x) + 2 * x_range)),
             maxfev=10000,
         )
-        return float(params[1])
+        return float(np.clip(params[1], np.min(x), np.max(x)))
     except (RuntimeError, ValueError, FloatingPointError):
         return float("nan")
 
@@ -868,6 +869,7 @@ def create_srt_comparison_plot(
                         2 * error_points["professional_srt_std"] > label_error_bar_db
                     ]
                     for (_, point), label in zip(long_bars.iterrows(), _subject_labels(long_bars)):
+                        print('Found long error bar for point:', point, 'with label:', label)
                         axis.annotate(
                             label,
                             (point[x_column], point[y_column]),
